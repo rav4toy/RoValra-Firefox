@@ -50,7 +50,7 @@ Install directly from the [Firefox Add-on Store](https://addons.mozilla.org/en-U
 <details>
 <summary><strong>Expand instructions</strong></summary>
 
-### Build from source
+### Build from source(addin this soon)
 
 ```bash
 npm install
