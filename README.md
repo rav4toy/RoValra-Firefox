@@ -13,6 +13,8 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/NotValra/RoValra/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/NotValra/RoValra?label=License"></a>
+  <a href="https://chromewebstore.google.com/detail/rovalra-roblox-improved/njcickgebhnpgmoodjdgohkclfplejli/reviews"><img alt="Rating" src="https://img.shields.io/chrome-web-store/stars/njcickgebhnpgmoodjdgohkclfplejli?logo=reverbnation&logoColor=yellow&link=https%3A%2F%2Fchromewebstore.google.com%2Fdetail%2Frovalra-roblox-improved%2Fnjcickgebhnpgmoodjdgohkclfplejli%2Freviews&label=Rating"></a>
   <a href="https://discord.gg/GHd5cSKJRk"><img alt="Discord" src="https://img.shields.io/discord/1143867106765570088?logo=discord&logoColor=white&label=Discord&color=002bff&link=https://discord.gg/GHd5cSKJRk"></a>
 
 </p>
@@ -57,7 +59,7 @@ npm install
 npm run build
 ````
 
-### Load into browser
+### Load into your browser
 
 ## Manual Installation
 1. Zip the main repository files.
@@ -69,14 +71,6 @@ npm run build
 </details>
 
 ---
-
-
-## Manual Installation
-1. Zip the main repository files.
-2. Go to `about:debugging#/runtime/this-firefox`
-3. Click **Load Temporary Add-on**
-4. Select the Zip File
-5. Do this everytime you close your browser
 
 # Credits
 * **Me for making the port(recreationalactivevehicle)**
