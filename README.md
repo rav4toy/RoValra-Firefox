@@ -73,7 +73,7 @@ npm run build
 ---
 
 # Credits
-* **Me for making the port(recreationalactivevehicle)**
+* **Me for making the port (recreationalactivevehicle)**
 
 * **Contributors:**
   [https://github.com/NotValra/RoValra/graphs/contributors](https://github.com/NotValra/RoValra/graphs/contributors)
