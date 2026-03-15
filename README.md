@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://rovalra.com"><strong>Official Website</strong></a> •
-  <a href="https://chromewebstore.google.com/detail/RoValra%20-%20Roblox%20Improved/njcickgebhnpgmoodjdgohkclfplejli">Chrome Web Store</a> •
+  <a href=https://addons.mozilla.org/en-US/firefox/addon/rovalra-rav4/">Firefox Add-on Store</a> •
   <a href="https://discord.gg/GHd5cSKJRk">Discord</a>
 </p>
 
@@ -43,15 +43,13 @@ It helps a lot and supports continued development.
 ---
 ## Installation
 
-### Option 1: Chrome Web Store and Firefox Web Store (Recommended)
+### Option 1: Firefox Add-on Store (Recommended)
 
-Install directly from the [Chrome Web Store](https://chromewebstore.google.com/detail/RoValra%20-%20Roblox%20Improved/njcickgebhnpgmoodjdgohkclfplejli)
-> [!NOTE]
-> Firefox port of RoValra was removed by Firefox.
+Install directly from the [Firefox Add-on Store](https://addons.mozilla.org/en-US/firefox/addon/rovalra-rav4/)
 
 ---
 
-### Option 2: Manual Installation (Developer Mode)
+### Option 2: Manual Installation 
 
 <details>
 <summary><strong>Expand instructions</strong></summary>
@@ -65,20 +63,27 @@ npm run build
 
 ### Load into browser
 
-1. Enable **Developer Mode** in your browser’s extensions page
-2. Download and unzip the latest release from
-   [https://github.com/NotValra/RoValra/releases](https://github.com/NotValra/RoValra/releases)
-3. Import the folder that directly contains:
-
-   * `manifest.json`
-
+## Manual Installation
+1. Zip the main repository files.
+2. Go to `about:debugging#/runtime/this-firefox`
+3. Click **Load Temporary Add-on**
+4. Select the Zip File
+5. Do this everytime you close your browser
 
 </details>
 
 ---
 
 
-## Credits
+## Manual Installation
+1. Zip the main repository files.
+2. Go to `about:debugging#/runtime/this-firefox`
+3. Click **Load Temporary Add-on**
+4. Select the Zip File
+5. Do this everytime you close your browser
+
+# Credits
+* **Me for making the port(recreationalactivevehicle)**
 
 * **Contributors:**
   [https://github.com/NotValra/RoValra/graphs/contributors](https://github.com/NotValra/RoValra/graphs/contributors)
