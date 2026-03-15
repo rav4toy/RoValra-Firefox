@@ -27,8 +27,6 @@
 - **Features:** https://www.rovalra.com/features/  
 - **FAQ & Support:** https://www.rovalra.com/support/  
 
-> [!WARNING]
-> RoValra is only distributed through the official website and Chrome Web Store.
 
 ---
 
