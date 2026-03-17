@@ -1,0 +1,29 @@
+{
+  "name": "rovalra",
+  "version": "2.4.10.1",
+  "description": "Firefox port of RoValra - An extension aiming to provide features that other Roblox extensions paywall!",
+  "private": true,
+  "scripts": {
+    "build": "npm run clean && node build.js",
+    "clean": "rimraf dist",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "esbuild": "^0.27.3",
+    "eslint": "10.0.2",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.4.0",
+    "prettier": "^3.8.1",
+    "prettier-eslint": "^16.4.2",
+    "rimraf": "^6.1.3",
+    "sass": "^1.97.3"
+  },
+  "dependencies": {
+    "dompurify": "^3.3.2",
+    "marked": "^17.0.4"
+  },
+  "lint-staged": {
+    "*.js": "eslint --fix",
+    "*.{js,json,css,md}": "prettier --write"
+  }
+}
