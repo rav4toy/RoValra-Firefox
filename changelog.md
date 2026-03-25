@@ -1,8 +1,18 @@
-\## 2.4.10.2 Firefox 3/14/2026
+\## 2.4.11.1 Firefox 3/25/2026
 
-&#x20; # Changes : 
+&#x20; # Changes :
+
+* Updated to RoValra 2.4.11
+
+
+
+## 2.4.10.1 Firefox 3/14/2026
+
+&#x20; # Changes :
 
 * Updated to RoValra 2.4.10 (sorry for the wait🥹)
+
+
 
 
 
@@ -14,11 +24,15 @@
 
 
 
+
+
 \## 2.4.9.1 Firefox 2/22/2026
 
   # Changes :
 
 * Updated to RoValra 2.4.7 -> 2.4.8 -> 2.4.9
+
+
 
 
 
@@ -32,6 +46,8 @@
   # Known Issues :
 
 * Fix Roblox Memory Leak not working.
+
+
 
 
 

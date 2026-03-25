@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "RoValra - A Better Add-on",
-  "version": "2.4.10.1",
+  "version": "2.4.11.1",
   "description": "An extension aiming to provide features that other Roblox extensions paywall!",
   "content_scripts": [
     {
@@ -20,10 +20,10 @@
     }
   ],
   "permissions": [
-    "windows",
-    "storage",
-    "scripting",
     "declarativeNetRequest",
+    "scripting",
+    "storage",
+    "windows",
     "menus"
   ],
   "host_permissions": [
@@ -31,7 +31,9 @@
     "*://*.roblox.com/*",
     "https://gamejoin.roblox.com/v1/join-game-instance",
     "https://users.roblox.com/*",
-    "https://apis.rovalra.com/*"
+    "https://apis.rovalra.com/*",
+    "https://*.rbxcdn.com/*",
+    "https://rbxcdn.com/*"
   ],
   "background": {
     "scripts": [
@@ -64,9 +66,10 @@
         "Assets/data/serverid_extractor.js",
         "data/*",
         "intercept.js",
+        "assets/*",
+        "css/*",
         "public/Assets/permission_request.html",
-        "public/Assets/permission_request.js",
-        "public/Assets/data/serverid_extractor.js"
+        "public/Assets/permission_request.js"
       ],
       "matches": [
         "https://www.roblox.com/*",
