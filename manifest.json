@@ -9,6 +9,7 @@
         "*://*.roblox.com/*"
       ],
       "js": [
+        "draco_decoder.js",
         "content.js"
       ],
       "css": [
