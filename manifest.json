@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "RoValra - A Better Add-on",
-  "version": "2.4.11.1",
+  "version": "2.4.12.5",
   "description": "An extension aiming to provide features that other Roblox extensions paywall!",
   "content_scripts": [
     {
@@ -10,6 +10,7 @@
       ],
       "js": [
         "draco_decoder.js",
+        "three_bundle.js",
         "content.js"
       ],
       "css": [
@@ -34,7 +35,9 @@
     "https://users.roblox.com/*",
     "https://apis.rovalra.com/*",
     "https://*.rbxcdn.com/*",
-    "https://rbxcdn.com/*"
+    "https://rbxcdn.com/*",
+    "https://www.rovalra.com/*",
+    "https://catalog.rovalra.com/*"
   ],
   "background": {
     "scripts": [

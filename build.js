@@ -43,6 +43,7 @@ ensureDir(dist);
 const filesToCopy = [
   ['manifest.json', 'manifest.json'],
   ['draco_decoder.js', 'draco_decoder.js'],
+  ['three_bundle.js', 'three_bundle.js'],
   ['content.js', 'content.js'],
   ['background.js', 'background.js'],
   ['intercept.js', 'intercept.js'],

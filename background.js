@@ -1,5 +1,5 @@
 /*!
- * rovalra v2.4.11
+ * rovalra v2.4.12.5
  * License: GPL-3.0
  * Repository: https://github.com/NotValra/RoValra
  * This extension is provided AS-IS without warranty.
@@ -29,6 +29,8 @@
             "Shows Roblox made items before they are on the official marketplace."
           ],
           deprecated: "Patched by Roblox",
+          locked: "This feature has been patched by Roblox and is no longer functional.",
+          isPermanent: !0,
           type: "checkbox",
           default: !1
         },
@@ -90,6 +92,14 @@
         PreviousPriceEnabled: {
           label: "Previous Price to item cards and on item pages.",
           description: "This shows the price of an offsale item before it went offsale.",
+          type: "checkbox",
+          default: !0
+        },
+        itemTradingEnabled: {
+          label: "Item Trading Info",
+          description: [
+            "Shows Rolimons values, demand, trend, rare, projected and more on item pages."
+          ],
           type: "checkbox",
           default: !0
         }
@@ -430,12 +440,20 @@
           description: [
             "Replaces the default profile avatar with a more customizable and feature-rich 3D renderer.",
             "This feature is required for custom environments and other render-related settings.",
-            "This feature was made possible cause of [RoAvatar](https://www.roavatar.com) \u2764\uFE0F"
+            "This feature was made possible cause of [RoAvatar](https://github.com/steinann/RoAvatar) \u2764\uFE0F"
           ],
           type: "checkbox",
           default: !1,
           experimental: "This feature may cause performance issues. And may be buggy",
           childSettings: {
+            profileRenderUseApi: {
+              label: "Use RoValra API for Environment",
+              description: "Uses RoValra's API to save your environment choice instead of your 'About Me' section.",
+              type: "checkbox",
+              default: !0,
+              donatorTier: 1,
+              donatorReason: "Donator 1 is required since RoValra doesnt have the resources to track the 200k+ user settings."
+            },
             profileRenderEnvironment: {
               label: "3D Profile Environment",
               description: [
@@ -445,6 +463,12 @@
               type: "select",
               options: [
                 { label: "None", value: "void", id: 1 },
+                {
+                  label: "Purple Space",
+                  value: "purple",
+                  environmentEndpoint: "/static/json/skyboxSpace.json",
+                  id: 2
+                },
                 {
                   label: "Crossroads",
                   value: "crossroads",
@@ -506,11 +530,27 @@
         statusBubbleEnabled: {
           label: "Status Bubble",
           description: [
-            "This allows you to set a status bubble that anyone with RoValra can see.",
-            "Also allows you to view other RoValra users status bubbles."
+            "This allows you to set a status bubble on your profile that anyone with RoValra can see.",
+            "Also allows you to view other RoValra users status bubbles.",
+            'This works by adding a little "s:" string to your about me.'
           ],
           type: "checkbox",
-          default: !0
+          default: !0,
+          childSettings: {
+            statusBubbleUseApi: {
+              label: "Use RoValra API for Status",
+              description: "Uses RoValra's API to save your status instead of your 'About Me' section.",
+              type: "checkbox",
+              default: !0,
+              donatorTier: 1,
+              donatorReason: "Donator 1 is required since RoValra doesnt have the resources to track the 200k+ user settings."
+            },
+            statusBubbleHomePage: {
+              label: "Status bubble for friends on home page, and other parts of the site where friends might show.",
+              type: "checkbox",
+              default: !0
+            }
+          }
         },
         donationbuttonEnable: {
           label: "Donation Button",
@@ -551,9 +591,9 @@
           }
         },
         userRapEnabled: {
-          label: "User RAP",
+          label: "User RAP/Value",
           description: [
-            "This shows a user's total RAP on their profile."
+            "This shows a user's total RAP/Value on their profile."
           ],
           type: "checkbox",
           default: !0,
@@ -712,6 +752,61 @@
           experimental: "May be inaccurate. And will take ages depending on the amount of sales",
           type: "checkbox",
           default: !1
+        }
+      }
+    },
+    Trading: {
+      title: "Trading",
+      settings: {
+        tradeValuesEnabled: {
+          label: "Trade Values",
+          description: [
+            "This shows a bunch of useful information when trading, stuff like:",
+            "Rolimons Values, Trade differences in values and rap, item demand, item trend and more."
+          ],
+          type: "checkbox",
+          default: !0
+        },
+        tradePreviewEnabled: {
+          label: "Trade Preview",
+          description: [
+            "Allows you to preview the value differences of a trade before opening it up.",
+            'Also changes the timestamp for when the trade was sent to something more readable and adds a "open in Rolimons" beside a users username'
+          ],
+          type: "checkbox",
+          default: !0
+        },
+        tradeFilterEnabled: {
+          label: "Trade Filter",
+          description: "Adds a search bar to the trade page. Allowing you to search for trades containing specific items.",
+          type: "checkbox",
+          default: !0
+        },
+        tradeSearchEnabled: {
+          label: "Trade Search",
+          description: "Allows you to search for items in the create trade pages to quickly find them.",
+          type: "checkbox",
+          default: !0
+        },
+        confirmTradeEnabled: {
+          label: "Trade Protection",
+          description: "This adds a small Preview of the trade you are doing in the accept / decline confirmation pop up.",
+          type: "checkbox",
+          default: !0
+        },
+        tradeProofEnabled: {
+          label: "Proof Trades",
+          description: "This allows you to quickly copy the rolimons proof format for any trade.",
+          type: "checkbox",
+          default: !1,
+          experimental: "This may be inaccurate, and may in some cases have issues resulting in an inaccurate proof. Please verify it is correct before using."
+        },
+        tradeRiskEnabled: {
+          label: "Show Item Risk",
+          description: "Shows the calculated risk of an item based on its trading history on item pages and trade pages.",
+          type: "checkbox",
+          default: !1,
+          experimental: "May be inaccurate. It is not recommended to fully rely on this."
         }
       }
     },
@@ -1190,6 +1285,8 @@ Standards{linkEnd}.`,
             "Pressing the 'Impersonate User' option does nothing other than error unless you are authorized to use it"
           ],
           deprecated: "Roblox removed it with the new profile overhaul",
+          locked: "This internal Roblox feature was removed during the profile page redesign.",
+          isPermanent: !0,
           type: "checkbox",
           default: !1
         },
@@ -1238,6 +1335,15 @@ Standards{linkEnd}.`,
         },
         rendererDeveloperToggles: {
           label: "3D renderer Developer toggles",
+          type: "checkbox",
+          default: !1
+        },
+        profile3DRenderBypassCheck: {
+          label: "Bypass Graphics Check",
+          description: [
+            "Bypasses the compatibility check for the 3D Profile Renderer.",
+            "Only enable this if the 3D renderer was disabled due to graphics issues but you want to try anyway."
+          ],
           type: "checkbox",
           default: !1
         },
@@ -1470,6 +1576,15 @@ Standards{linkEnd}.`,
               default: "",
               placeholder: "Enter URL"
             },
+            importEnvironmentConfig: {
+              label: "Import Environment Config",
+              description: [
+                "Import a JSON file with environment settings. This will overwrite the current values in the tester."
+              ],
+              type: "button",
+              buttonText: "Import from JSON",
+              event: "rovalra:importEnvironmentJson"
+            },
             // generate button
             generateJson: {
               label: "Generate and Print JSON",
@@ -1647,22 +1762,57 @@ Standards{linkEnd}.`,
   async function callRobloxApiBackground(options) {
     let {
       subdomain = "api",
-      endpoint,
+      endpoint = "",
       method = "GET",
       body = null,
-      headers = {}
-    } = options, separator = endpoint.includes("?") ? "&" : "?", url = `https://${subdomain}.roblox.com${endpoint}`;
-    endpoint.includes("/player-hydration-service/v1/players/signed") || (url += `${separator}_RoValraRequest=`);
-    let fetchOptions = { method, headers: { ...headers } };
-    body && (fetchOptions.headers["Content-Type"] = "application/json", fetchOptions.body = JSON.stringify(body)), method !== "GET" && method !== "HEAD" && state.csrfTokenCache && (fetchOptions.headers["X-CSRF-TOKEN"] = state.csrfTokenCache);
+      headers = {},
+      fullUrl = null,
+      isRovalraApi = !1,
+      credentials,
+      noCache = !1
+    } = options, baseUrl = isRovalraApi ? subdomain === "www" ? "https://www.rovalra.com" : `https://${subdomain}.rovalra.com` : `https://${subdomain}.roblox.com`, url = fullUrl || `${baseUrl}${endpoint}`;
+    let isStaticBinaryRequest = !1;
+    try {
+      isStaticBinaryRequest = /\.(?:glb|gltf|bin|png|jpe?g|webp|gif|bmp|svg|ktx2?|hdr|mp3|ogg|wav)(?:$|[?#])/i.test(new URL(url).pathname);
+    } catch {
+    }
+    let shouldAppendMarker = !url.includes("_RoValraRequest=") && !endpoint.includes("/player-hydration-service/v1/players/signed") && !isStaticBinaryRequest;
+    shouldAppendMarker && (url += `${url.includes("?") ? "&" : "?"}_RoValraRequest=`);
+    let fetchHeaders = new Headers(headers || {});
+    fetchHeaders.has("Accept") || fetchHeaders.set("Accept", isStaticBinaryRequest ? "*/*" : "application/json");
+    let serializedHeaders = {};
+    fetchHeaders.forEach((val, key) => serializedHeaders[key] = val);
+    let fetchOptions = {
+      method,
+      headers: serializedHeaders,
+      credentials: credentials ?? (isRovalraApi ? "omit" : "include")
+    };
+    noCache && (fetchOptions.cache = "no-store");
+    if (body != null && method !== "GET" && method !== "HEAD")
+      if (typeof FormData < "u" && body instanceof FormData)
+        fetchOptions.body = body;
+      else if (typeof body == "object")
+        fetchOptions.headers["Content-Type"] || (fetchOptions.headers["Content-Type"] = "application/json"), fetchOptions.body = JSON.stringify(body);
+      else
+        fetchOptions.body = body;
+    !isRovalraApi && method !== "GET" && method !== "HEAD" && state.csrfTokenCache && (fetchOptions.headers["X-CSRF-TOKEN"] = state.csrfTokenCache);
     let response = await fetch(url, fetchOptions);
-    if (response.status === 403 && method !== "GET" && method !== "HEAD") {
+    if (!isRovalraApi && response.status === 403 && method !== "GET" && method !== "HEAD") {
       let newCsrf = response.headers.get("x-csrf-token");
       newCsrf && (state.csrfTokenCache = newCsrf, fetchOptions.headers["X-CSRF-TOKEN"] = newCsrf, response = await fetch(url, fetchOptions));
     }
     return response;
   }
   __name(callRobloxApiBackground, "callRobloxApiBackground");
+  function arrayBufferToBase64(buffer) {
+    let bytes = new Uint8Array(buffer), chunkSize = 32768, binary = "";
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      let chunk = bytes.subarray(i, i + chunkSize);
+      binary += String.fromCharCode(...chunk);
+    }
+    return btoa(binary);
+  }
+  __name(arrayBufferToBase64, "arrayBufferToBase64");
   async function wearOutfit(outfitData) {
     let callWithRetry = /* @__PURE__ */ __name(async (options) => {
       let response;
@@ -1812,10 +1962,10 @@ Standards{linkEnd}.`,
   }
   __name(updateAvatarRotator, "updateAvatarRotator");
   chrome.runtime.onInstalled.addListener((details) => {
-    initializeSettings(details.reason), updateUserAgentRule(), setupContextMenuListener();
+    initializeSettings(details.reason), setupContextMenuListener();
   });
   chrome.runtime.onStartup.addListener(() => {
-    initializeSettings("startup"), updateUserAgentRule(), setupContextMenuListener();
+    initializeSettings("startup"), setupContextMenuListener();
   });
   chrome.storage.onChanged.addListener((changes, namespace) => {
     namespace === "local" && (changes.MemoryleakFixEnabled && (state.isMemoryFixEnabled = changes.MemoryleakFixEnabled.newValue, state.isMemoryFixEnabled && setupNavigationListener()), (changes.rovalra_avatar_rotator_enabled || changes.rovalra_avatar_rotator_ids || changes.rovalra_avatar_rotator_interval) && updateAvatarRotator());
@@ -1879,35 +2029,6 @@ Standards{linkEnd}.`,
           files: [request.path],
           world: "MAIN"
         }), sendResponse({ success: !0 }), !1;
-      case "proxyFetch":
-        return (async () => {
-          try {
-            let { url, method = "GET", headers = {}, body = null, credentials = "omit", binary = !1 } = request, fetchOptions = { method, headers, credentials };
-            body && (fetchOptions.body = body);
-            let response = await fetch(url, fetchOptions), responseHeaders = {};
-            response.headers.forEach((value, key) => {
-              responseHeaders[key] = value;
-            });
-            let responseBody;
-            if (binary) {
-              let buffer = await response.arrayBuffer(), bytes = new Uint8Array(buffer), str = "";
-              for (let i = 0; i < bytes.length; i += 8192)
-                str += String.fromCharCode(...bytes.subarray(i, i + 8192));
-              responseBody = btoa(str);
-            } else
-              responseBody = await response.text();
-            sendResponse({
-              ok: response.ok,
-              status: response.status,
-              statusText: response.statusText,
-              headers: responseHeaders,
-              contentType: response.headers.get("content-type") || "",
-              body: responseBody
-            });
-          } catch (e) {
-            sendResponse({ ok: !1, status: 0, statusText: e.message, headers: {}, body: null, error: e.message });
-          }
-        })(), !0;
       case "checkPermission":
         return chrome.permissions.contains(
           { permissions: [].concat(request.permission) },
@@ -1916,33 +2037,35 @@ Standards{linkEnd}.`,
           }
         ), !0;
       case "requestPermission":
-        if ([].concat(request.permission).includes("menus")) { sendResponse({ granted: true }); return false; }
-        (async () => {
-          const permission = [].concat(request.permission);
-          const requestId = "perm_" + Date.now() + "_" + Math.random().toString(36).slice(2);
-          const pageUrl = chrome.runtime.getURL("public/Assets/permission_request.html?permission=" + encodeURIComponent(permission[0]) + "&requestId=" + encodeURIComponent(requestId));
-          const resultPromise = new Promise((resolve) => {
+        return [].concat(request.permission).includes("menus") ? (sendResponse({ granted: !0 }), !1) : ((async () => {
+          let permission = [].concat(request.permission), requestId = "perm_" + Date.now() + "_" + Math.random().toString(36).slice(2), pageUrl = chrome.runtime.getURL(
+            "public/Assets/permission_request.html?permission=" + encodeURIComponent(permission[0]) + "&requestId=" + encodeURIComponent(requestId)
+          ), resultPromise = new Promise((resolve) => {
             function resultListener(msg, _sender, respond) {
-              if (msg.action === "permissionRequestResult" && msg.requestId === requestId) {
-                chrome.runtime.onMessage.removeListener(resultListener); resolve(!!msg.granted);
-                if (typeof respond === "function") respond({}); return true;
-              }
+              if (msg.action === "permissionRequestResult" && msg.requestId === requestId)
+                return chrome.runtime.onMessage.removeListener(resultListener), resolve(!!msg.granted), typeof respond == "function" && respond({}), !0;
             }
-            chrome.runtime.onMessage.addListener(resultListener);
-            setTimeout(() => { chrome.runtime.onMessage.removeListener(resultListener); resolve(false); }, 300000);
+            __name(resultListener, "resultListener"), chrome.runtime.onMessage.addListener(resultListener), setTimeout(() => {
+              chrome.runtime.onMessage.removeListener(resultListener), resolve(!1);
+            }, 3e5);
           });
-          try { chrome.windows.create({ url: pageUrl, type: "popup", width: 440, height: 300 }); } catch (e) { chrome.tabs.create({ url: pageUrl }); }
+          try {
+            chrome.windows.create({ url: pageUrl, type: "popup", width: 440, height: 300 });
+          } catch {
+            chrome.tabs.create({ url: pageUrl });
+          }
           sendResponse({ granted: await resultPromise });
-        })();
-        return true;
+        })(), !0);
       case "revokePermission":
-        if ([].concat(request.permission).includes("menus")) { sendResponse({ revoked: false }); return false; }
-        return chrome.permissions.remove(
+        return [].concat(request.permission).includes("menus") ? (sendResponse({ revoked: !1 }), !1) : (chrome.permissions.remove(
           { permissions: [].concat(request.permission) },
           (removed) => {
-            chrome.runtime.lastError ? sendResponse({ revoked: !1, error: chrome.runtime.lastError.message }) : sendResponse({ revoked: removed });
+            chrome.runtime.lastError ? sendResponse({
+              revoked: !1,
+              error: chrome.runtime.lastError.message
+            }) : sendResponse({ revoked: removed });
           }
-        ), !0;
+        ), !0);
       case "updateUserId":
         return request.userId && request.userId !== state.currentUserId && (state.currentUserId = request.userId, state.latestPresence = null, state.pollingInterval && clearInterval(state.pollingInterval), pollUserPresence(), state.pollingInterval = setInterval(pollUserPresence, 5e3)), !1;
       case "presencePollResult":
@@ -1951,6 +2074,59 @@ Standards{linkEnd}.`,
         return sendResponse({ presence: state.latestPresence }), !1;
       case "wearOutfit":
         return wearOutfit(request.outfitId).then(sendResponse), !0;
+      case "fetchRobloxApi":
+        return callRobloxApiBackground(request.options).then(async (response) => {
+          let headers = {};
+          response.headers.forEach(
+            (val, key) => headers[key] = val
+          );
+          let body = await response.text().catch(() => null);
+          sendResponse({
+            ok: response.ok,
+            status: response.status,
+            statusText: response.statusText,
+            headers,
+            body
+          });
+        }).catch((err) => {
+          console.error("RoValra: Background API fetch failed", err), sendResponse({
+            ok: !1,
+            status: 500,
+            statusText: "Extension Error",
+            body: null
+          });
+        }), !0;
+      case "fetchBinaryResource":
+        return callRobloxApiBackground({
+          fullUrl: request.url,
+          method: request.method || "GET",
+          headers: request.headers || {},
+          credentials: request.credentials,
+          noCache: !!request.noCache,
+          isRovalraApi: /(^https:\/\/)([^/]+\.)?rovalra\.com\//i.test(request.url || "")
+        }).then(async (response) => {
+          let headers = {};
+          response.headers.forEach(
+            (val, key) => headers[key] = val
+          );
+          let buffer = await response.arrayBuffer().catch(() => null);
+          sendResponse({
+            ok: response.ok,
+            status: response.status,
+            statusText: response.statusText,
+            headers,
+            contentType: response.headers.get("content-type") || "application/octet-stream",
+            bodyBase64: buffer ? arrayBufferToBase64(buffer) : null
+          });
+        }).catch((err) => {
+          console.error("RoValra: Background binary fetch failed", err), sendResponse({
+            ok: !1,
+            status: 500,
+            statusText: "Extension Error",
+            bodyBase64: null,
+            contentType: "application/octet-stream"
+          });
+        }), !0;
       case "updateContextMenu":
         return chrome.menus && chrome.storage.local.get(
           ["copyIdEnabled", "copyUniverseIdEnabled"],
@@ -1976,6 +2152,7 @@ Standards{linkEnd}.`,
   chrome.storage.local.get("MemoryleakFixEnabled", (result) => {
     result.MemoryleakFixEnabled && (state.isMemoryFixEnabled = !0, setupNavigationListener());
   });
+  updateUserAgentRule();
   updateAvatarRotator();
   setupContextMenuListener();
   function luDecompose(A) {
@@ -2002,30 +2179,32 @@ Standards{linkEnd}.`,
     return { LU, P };
   }
   __name(luDecompose, "luDecompose");
-  function luSolve({ LU, P }, b) {
-    let n = LU.length, x = new Float32Array(n);
-    for (let i = 0; i < n; i++) x[i] = b[P[i]];
-    for (let i = 0; i < n; i++) {
-      let row = LU[i], sum = x[i];
-      for (let j = 0; j < i; j++) sum -= row[j] * x[j];
-      x[i] = sum;
-    }
-    for (let i = n - 1; i >= 0; i--) {
-      let row = LU[i], sum = x[i];
-      for (let j = i + 1; j < n; j++) sum -= row[j] * x[j];
-      x[i] = sum / row[i];
-    }
-    return x;
-  }
-  __name(luSolve, "luSolve");
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.type === "OFFLOAD_RBF_MATH") {
-      let [_A, _bx, _by, _bz] = request.data, A = _A.map((row) => row instanceof Float32Array ? row : Array.isArray(row) ? new Float32Array(row) : new Float32Array(Object.values(row))), bx = _bx instanceof Float32Array ? _bx : new Float32Array(Object.values(_bx)), by = _by instanceof Float32Array ? _by : new Float32Array(Object.values(_by)), bz = _bz instanceof Float32Array ? _bz : new Float32Array(Object.values(_bz)), LU = luDecompose(A), wx = luSolve(LU, bx), wy = luSolve(LU, by), wz = luSolve(LU, bz), n = wx.length, result = new Float32Array(n * 3);
-      for (let i = 0; i < n; i++)
-        result[i * 3 + 0] = wx[i], result[i * 3 + 1] = wy[i], result[i * 3 + 2] = wz[i];
-      sendResponse([...result]);
-      return false;
+      let [_A, _bx, _by, _bz] = request.data, A = _A.map((row) => row instanceof Float32Array ? row : Array.isArray(row) ? new Float32Array(row) : new Float32Array(Object.values(row))), bx = _bx instanceof Float32Array ? _bx : new Float32Array(Object.values(_bx)), by = _by instanceof Float32Array ? _by : new Float32Array(Object.values(_by)), bz = _bz instanceof Float32Array ? _bz : new Float32Array(Object.values(_bz)), { LU, P } = luDecompose(A), n = LU.length, result = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) {
+        let pIdx = P[i];
+        result[i * 3 + 0] = bx[pIdx], result[i * 3 + 1] = by[pIdx], result[i * 3 + 2] = bz[pIdx];
+      }
+      for (let i = 0; i < n; i++) {
+        let row = LU[i], sumX = result[i * 3 + 0], sumY = result[i * 3 + 1], sumZ = result[i * 3 + 2];
+        for (let j = 0; j < i; j++) {
+          let val = row[j], rj = j * 3;
+          sumX -= val * result[rj + 0], sumY -= val * result[rj + 1], sumZ -= val * result[rj + 2];
+        }
+        result[i * 3 + 0] = sumX, result[i * 3 + 1] = sumY, result[i * 3 + 2] = sumZ;
+      }
+      for (let i = n - 1; i >= 0; i--) {
+        let row = LU[i], sumX = result[i * 3 + 0], sumY = result[i * 3 + 1], sumZ = result[i * 3 + 2];
+        for (let j = i + 1; j < n; j++) {
+          let val = row[j], rj = j * 3;
+          sumX -= val * result[rj + 0], sumY -= val * result[rj + 1], sumZ -= val * result[rj + 2];
+        }
+        let div = row[i];
+        result[i * 3 + 0] = sumX / div, result[i * 3 + 1] = sumY / div, result[i * 3 + 2] = sumZ / div;
+      }
+      sendResponse(result);
     }
-    return false;
+    return !0;
   });
 })();
