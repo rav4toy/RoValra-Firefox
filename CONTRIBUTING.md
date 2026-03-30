@@ -66,5 +66,8 @@ The badge is completely optional.
 *   Keep code clean and readable.
 *   Follow the existing coding style of the project.
 *   Test your changes before submitting.
-*   For safety reasons, all `innerHTML` should be purified with `DOMPurify`, even if it's static.
+*   For safety reasons, all innerHTML should be purified with DOMPurify, or preferably using safeHtml
 *   Generally follow how other scripts do things and how they import other scripts to implement functionality.
+*   All api requests should go through api.js
+*   Never use third party apis that isn't RoValra.com, Roblox.com or rbxcdn.com in your prs
+*   Make addtions to the site look as close to Roblox as possibl
