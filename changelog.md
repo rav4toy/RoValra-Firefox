@@ -1,6 +1,16 @@
+\## 2.4.12.3 Firefox 3/30/2026
+
+&#x20; # Fixes :
+
+* Hopefully fixed the 3D Profile renderer this time🙏
+
+
+
+
+
 \## 2.4.12.2 Firefox 3/30/2026
 
-&#x20; # Fixes : 
+&#x20; # Fixes :
 
 * Fixed 3D Profile Renderer not displaying textures.
 * Fixed Join Closest Server not joining in some specific games.

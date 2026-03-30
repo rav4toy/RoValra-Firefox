@@ -32,6 +32,8 @@ var cloneArrayBufferToLocal = /* @__PURE__ */ __name(function(buffer) {
     return buffer;
   }
 }, "cloneArrayBufferToLocal");
+globalThis.arrayBufferToBase64Local = typeof globalThis.arrayBufferToBase64Local === "function" ? globalThis.arrayBufferToBase64Local : arrayBufferToBase64Local;
+globalThis.cloneArrayBufferToLocal = typeof globalThis.cloneArrayBufferToLocal === "function" ? globalThis.cloneArrayBufferToLocal : cloneArrayBufferToLocal;
 // node_modules/three/index.js
   var require_three = globalThis.require_three = __commonJS({
     "node_modules/three/index.js"(exports, module) {
@@ -35071,11 +35073,11 @@ gl_FragDepth = texture( depthColor, vec3( coord.x, coord.y, 0 ) ).r;
           let sourceDef = json.images[sourceIndex], URL2 = self.URL || self.webkitURL, sourceURI = sourceDef.uri || "", isObjectURL = !1;
           if (sourceDef.bufferView !== void 0)
             sourceURI = parser.getDependency("bufferView", sourceDef.bufferView).then(function(bufferView) {
-              let localBufferView = cloneArrayBufferToLocal(bufferView);
+              let localBufferView = globalThis.cloneArrayBufferToLocal(bufferView);
               if (typeof localBufferView == "string" && localBufferView.startsWith("data:"))
                 return sourceURI = localBufferView, sourceURI;
               let bytes = typeof ArrayBuffer < "u" && typeof ArrayBuffer.isView == "function" && ArrayBuffer.isView(localBufferView) ? new Uint8Array(localBufferView.buffer, localBufferView.byteOffset || 0, localBufferView.byteLength) : new Uint8Array(localBufferView);
-              return sourceURI = `data:${sourceDef.mimeType || "application/octet-stream"};base64,${arrayBufferToBase64Local(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength))}`, sourceURI;
+              return sourceURI = `data:${sourceDef.mimeType || "application/octet-stream"};base64,${globalThis.arrayBufferToBase64Local(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength))}`, sourceURI;
             });
           else if (sourceDef.uri === void 0)
             throw new Error("THREE.GLTFLoader: Image " + sourceIndex + " is missing URI and bufferView");
