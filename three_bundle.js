@@ -4,6 +4,34 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
 var __commonJS = (cb, mod) => function() {
   return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
+
+var arrayBufferToBase64Local = /* @__PURE__ */ __name(function(buffer) {
+  var bytes = new Uint8Array(buffer), chunkSize = 32768, binary = "";
+  for (var i = 0; i < bytes.length; i += chunkSize) {
+    var chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode.apply(null, chunk);
+  }
+  return btoa(binary);
+}, "arrayBufferToBase64Local");
+var cloneArrayBufferToLocal = /* @__PURE__ */ __name(function(buffer) {
+  if (!buffer) return buffer;
+  try {
+    if (typeof ArrayBuffer !== "undefined" && typeof ArrayBuffer.isView === "function" && ArrayBuffer.isView(buffer)) {
+      var source = new Uint8Array(buffer.buffer, buffer.byteOffset || 0, buffer.byteLength);
+      return new Uint8Array(source).buffer;
+    }
+  } catch (e) {}
+  try {
+    if (buffer instanceof ArrayBuffer || Object.prototype.toString.call(buffer) === "[object ArrayBuffer]") {
+      return buffer.slice(0);
+    }
+  } catch (e) {}
+  try {
+    return typeof buffer.slice === "function" ? buffer.slice(0) : buffer;
+  } catch (e) {
+    return buffer;
+  }
+}, "cloneArrayBufferToLocal");
 // node_modules/three/index.js
   var require_three = globalThis.require_three = __commonJS({
     "node_modules/three/index.js"(exports, module) {

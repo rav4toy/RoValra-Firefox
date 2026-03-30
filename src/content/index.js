@@ -48129,7 +48129,7 @@ function run() {
                 if (bestServerTier === 0)
                   if (updateLoadingOverlayText(
                     purify.sanitize(
-                      `Found ${bestName}! Verifying...`
+                      `Found ${bestName2}! Verifying...`
                     )
                   ), await isServerActive(
                     placeId,

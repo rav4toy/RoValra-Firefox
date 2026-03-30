@@ -104,3 +104,8 @@ npm run build
 
 * **Project Name:**
   coweggs (Discord)
+
+
+## AMO parsing note
+
+To keep `content.js` under AMO's 5 MB parsing limit, the embedded Draco decoder was moved into `draco_decoder.js`. The manifest now loads `draco_decoder.js` before `content.js`.
