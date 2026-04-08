@@ -1,6 +1,6 @@
 {
   "name": "rovalra",
-  "version": "2.4.12.3",
+  "version": "2.4.12.4",
   "description": "Firefox port of RoValra - An extension aiming to provide features that other Roblox extensions paywall!",
   "private": true,
   "scripts": {

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "RoValra - A Better Add-on",
-  "version": "2.4.12.3",
+  "version": "2.4.12.4",
   "description": "An extension aiming to provide features that other Roblox extensions paywall!",
   "content_scripts": [
     {

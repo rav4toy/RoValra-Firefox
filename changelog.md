@@ -1,3 +1,14 @@
+\## 2.4.12.4 Firefox 9/04/2026
+
+&#x20; # Fixes :
+
+* Fixed some labels not showing correctly.
+* Fixed RoValra not joining the closest server after a bit of searching.
+
+
+
+
+
 \## 2.4.12.3 Firefox 3/30/2026
 
 &#x20; # Fixes :

@@ -48108,14 +48108,14 @@ function run() {
                     ) ? thisServerTier < bestRecycledTier && (bestRecycledServer = server, bestRecycledRegionCode = regionCode, bestRecycledTier = thisServerTier) : thisServerTier < bestServerTier && (bestServerFoundSoFar = server, bestServerRegionCode = regionCode, bestServerTier = thisServerTier, improvedThisRound = !0);
                   }
                 }
+                let bestName2 = bestServerRegionCode;
+                try {
+                  bestName2 = getRegionName(
+                    bestServerRegionCode
+                  );
+                } catch {
+                }
                 if (improvedThisRound) {
-                  let bestName2 = bestServerRegionCode;
-                  try {
-                    bestName2 = getRegionName(
-                      bestServerRegionCode
-                    );
-                  } catch {
-                  }
                   bestServerTier === 0 ? updateLoadingOverlayText(
                     purify.sanitize(
                       `Found ${bestName2}! Joining...`
@@ -56434,7 +56434,8 @@ function run() {
   function initRecentServers() {
     chrome.storage.local.get({ recentServersEnabled: !0 }, (settings) => {
       if (!settings.recentServersEnabled) return;
-      let inject = /* @__PURE__ */ __name(() => {
+      let inject = /* @__PURE__ */ __name(async () => {
+        await i18nPromise;
         let container = document.querySelector(
           "#roseal-running-game-instances-container"
         ) || document.querySelector("#running-game-instances-container");
@@ -57975,7 +57976,7 @@ Markdown test
     chrome.storage.local.get({ updateHistoryEnabled: !1 }, (settings) => {
       settings.updateHistoryEnabled && observeElement(
         "#horizontal-tabs",
-        (tabContainer) => {
+        async (tabContainer) => {
           if (tabContainer.dataset.rovalraUpdatesTabInitialized === "true")
             return;
           tabContainer.dataset.rovalraUpdatesTabInitialized = "true";
@@ -57985,6 +57986,7 @@ Markdown test
           if (!contentSection) return;
           let placeId = getPlaceIdFromUrl();
           if (placeId) {
+            await i18nPromise;
             document.getElementById("tab-updates")?.remove(), document.getElementById("updates-content-pane")?.remove();
             let { contentPane } = createTab({
               id: "updates",
