@@ -41,10 +41,10 @@
             "order": "Ordine"
         },
         "sort": {
-            "default": "Default",
-            "likeRatio": "Raport Like-uri",
-            "likes": "Like-uri",
-            "dislikes": "Dislike-uri",
+            "default": "Normal",
+            "likeRatio": "Raport aprecieri",
+            "likes": "Aprecieri",
+            "dislikes": "Dezaprecieri",
             "players": "Jucători",
             "name": "Nume (Z-A)"
         },
@@ -203,16 +203,16 @@
         "newCalculation": "Calcul Nou",
         "errorTitle": "A apărut o eroare",
         "retry": "Încearcă din nou",
-        "calculateSpend": "Calculează Plăți",
+        "calculateSpend": "Calculează Cheltuielile",
         "pausedMessage": "Calculare pauzată. Rezumează pentru a continua numărarea.",
         "resumeCalculation": "Rezumă Calculul",
         "startNewCalculation": "Începe calcul nou",
         "description": "Selectează un mod pentru a calcula istoria ta de tranzacții.",
-        "calculateRobux": "Calculează Robux Plătiți",
-        "calculateMoney": "Calculează Banii Plătiți",
+        "calculateRobux": "Calculează Robux Cheltuiți",
+        "calculateMoney": "Calculează Banii Cheltuiți",
         "transactionsScanned": "Tranzacții Scanate",
-        "totalRobuxSpent": "Robuxi Plătiți în Total",
-        "totalMoneySpent": "Plătiți în total (Aprox.)",
+        "totalRobuxSpent": "Robuxi Cheltuit în Total",
+        "totalMoneySpent": "Banii Cheltuit în total (Aprox.)",
         "itemTypeBreakdown": "Defalcarea Tipurilor de Itemi",
         "premiumBreakdown": "Detalierea Abonamentelor Premium",
         "purchaseBreakdown": "Detalierea achizițiilor de Robux",
@@ -282,7 +282,7 @@
             "note": "Note: Insignele pot lua câteva minute să apară după donație. TPentru a gestiona vizibilitatea insignei, accesați tab-ul de setări „Profil”. Dacă aveți sub 13 ani și donați, nu veți putea activa/dezactiva vizibilitatea insignei voastre de donator. Din păcate, donațiile prin comisioane nu oferă beneficii — aceasta este o limitare de la Roblox."
         },
         "search": {
-            "minLength": "Vă rugăm introduceți măcar două caractere pentru a căuta.",
+            "minLength": "Vă rugăm să introduceți măcar două caractere pentru a căuta.",
             "noResults": "Nicio setare nu a fost găsită pentru „{{query}}”."
         }
     },
@@ -370,7 +370,7 @@
         "loadMore": "Încarcă mai multe",
         "rootPlace": "Loc principal",
         "noSubplaces": "Nu au fost găsite locuri secundare.",
-        "failedToLoad": "Nu s-au putut încărca locurile secundare.",
+        "failedToLoad": "Nu s-a putut încărca locurile secundare.",
         "banner": {
             "title": "Vizualizezi în prezent un loc secundar al [{{rootPlaceName}}]({{rootPlaceUrl}}).",
             "descriptionDefault": "Unele experiențe pot dezactiva alăturarea la locurile secundare.",
@@ -487,7 +487,7 @@
         "production": "Producție",
         "launchingRoblox": "Se lansează Roblox",
         "downloadRoblox": "Descarcă Roblox",
-        "thanksDownloading": "Mulțumim pentru descărcarea Roblox",
+        "thanksDownloading": "Mulțumim că ai descărcat Roblox",
         "downloadInstructions": "Doar urmează pașii de mai jos pentru a instala Roblox. Descărcarea ar trebui să înceapă în câteva secunde. Dacă nu, <a id=\"rovalra-restart-download\" href=\"#\" class=\"download-link-underline\">repornește descărcarea</a>.",
         "installInstructions": "Instrucțiuni de instalare",
         "step1": "După descărcare, fă dublu click pe fișierul <b>RobloxPlayerInstaller.exe</b> din folderul Descărcări.",
