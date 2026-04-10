@@ -148,7 +148,8 @@
         "noItemsMatch": "Niciun obiect nu corespunde criteriilor selectate.",
         "collectiblesTitle": "Colecționabilele lui {{displayName}} ({{totalRapString}} RAP)",
         "inventoryPrivateOrNoLimiteds": "Inventarul acestui utilizator este privat sau nu conține iteme limitate.",
-        "searchByName": "Caută după numele obiectului"
+        "searchByName": "Caută după numele obiectului",
+        "collectiblesTitleValue": "Colecționabilele lui {{displayName}} ({{totalRapString}} Valoare)"
     },
     "firstAccount": {
         "label": "Primul Cont",
@@ -279,7 +280,8 @@
             "previousRewards": "+ Toate avantajele nivelurilor anterioare",
             "moreComingSoon": "Mai multe apar în curând.",
             "availableBadges": "Insigne disponibile",
-            "note": "Notă: Insignele pot dura câteva minute să apară după donație. Pentru a gestiona vizibilitatea insignei, accesați fila de setări „Profil”. Dacă aveți sub 13 ani și donați, nu veți putea activa/dezactiva vizibilitatea insignei voastre de donator. Din păcate, donațiile prin comisioane nu oferă beneficii — aceasta este o limitare a Roblox."
+            "note": "Notă: Insignele pot dura câteva minute să apară după donație. Pentru a gestiona vizibilitatea insignei, accesați fila de setări „Profil”. Dacă aveți sub 13 ani și donați, nu veți putea activa/dezactiva vizibilitatea insignei voastre de donator. Din păcate, donațiile prin comisioane nu oferă beneficii — aceasta este o limitare a Roblox.",
+            "tier1Feature": "Setează statusul și mediile fără să adaugi un text în descrierea ta."
         },
         "search": {
             "minLength": "Vă rugăm să introduceți măcar două caractere pentru a căuta.",
@@ -302,7 +304,8 @@
     },
     "betaPrograms": {
         "toggleTooltip": "Activați/Dezactivați programele Beta",
-        "noPrograms": "Nu ești înscris în niciun program beta."
+        "noPrograms": "Nu ești înscris în niciun program beta.",
+        "allowlist": "Într-o listă de acces"
     },
     "quickSearch": {
         "aborted": "Anulat",
@@ -523,5 +526,176 @@
         "multipleBundlesDescription": "Acest obiect este probabil folosit ca șablon și este inclus în mai multe bundle-uri.",
         "partOfBundle": "Acest obiect face parte din bundle-ul [{{bundleName}}]({{bundleUrl}})",
         "viewingFromBundle": "Vizualizezi în prezent un item dintr-un bundle."
+    },
+    "rovalraBadges": {
+        "userVerified": "Utilizatorul este verificat cu ID.",
+        "userNotVerified": "Utilizatorul nu este verificat cu ID."
+    },
+    "friendsSince": {
+        "friended": "Împrietenit",
+        "lastSeen": "Văzut",
+        "age": "Vârstă",
+        "friendedVia": "Împrietenit prin",
+        "originFrom": "Din",
+        "originSearch": "Căutare",
+        "originInGame": "În joc",
+        "originProfile": "Profil",
+        "originQrCode": "Cod QR",
+        "originPeopleYouMayKnow": "Persoane pe care s-ar putea să le cunoști",
+        "originUnknown": "Necunoscut"
+    },
+    "unfriend": {
+        "confirmUnfriend": "Confirmă eliminarea din prieteni",
+        "confirmUnfriends": "Confirmă eliminările din prieteni",
+        "descriptionSingle": "Ești pe cale să elimini 1 prieten din lista de prieteni. Această acțiune nu poate fi anulată.",
+        "descriptionPlural": "Ești pe cale să elimini {{count}} prieteni din lista de prieteni. Această acțiune nu poate fi anulată.",
+        "cancel": "Anulează",
+        "unfriend": "Elimină din prieteni",
+        "unfriendCount": "Elimină din prieteni ({{count}})",
+        "unfriendCountAction": "Elimină din prieteni {{count}} prieten",
+        "unfriendCountActionPlural": "Elimină din prieteni {{count}} prieteni",
+        "unfriending": "Se elimină din prieteni...",
+        "bulkUnfriend": "Eliminare în masă din prieteni",
+        "exitBulkMode": "Ieși din modul de selecție în masă",
+        "successMessage": "{{successCount}}/{{totalCount}} prieteni au fost eliminați cu succes!"
+    },
+    "purchasePrompt": {
+        "balanceAfter": "Soldul tău după această tranzacție va fi"
+    },
+    "time": {
+        "justNow": "chiar acum",
+        "secondsAgo": "acum {{count}}s",
+        "minutesAgo": "acum {{count}}m",
+        "hoursAgo": "acum {{count}}h",
+        "daysAgo": "acum {{count}}z",
+        "weeksAgo": "acum {{count}}săpt.",
+        "monthsAgo": "acum {{count}}luni",
+        "yearsAgo": "acum {{count}}a",
+        "months": {
+            "jan": "Ian",
+            "feb": "Feb",
+            "mar": "Mar",
+            "apr": "Apr",
+            "may": "Mai",
+            "jun": "Iun",
+            "jul": "Iul",
+            "aug": "Aug",
+            "sep": "Sep",
+            "oct": "Oct",
+            "nov": "Noi",
+            "dec": "Dec"
+        }
+    },
+    "privateGames": {
+        "tabs": {
+            "about": "Despre",
+            "store": "Magazin"
+        },
+        "privateExperience": "Experiență privată",
+        "experienceIsPrivate": "Această experiență este privată.",
+        "unknown": "Necunoscut",
+        "rovalraNotice": "Doar utilizatorii RoValra pot vedea această pagină.",
+        "unavailable": "Indisponibil",
+        "favorite": {
+            "add": "Adaugă la favorite",
+            "remove": "Elimină de la favorite",
+            "favorited": "Adăugat la favorite",
+            "favorite": "Favorit"
+        },
+        "notify": {
+            "tooltip": "Activează notificările",
+            "label": "Notifică"
+        },
+        "description": {
+            "title": "Descriere",
+            "noDescription": "Nu există nicio descriere disponibilă."
+        },
+        "stats": {
+            "active": "Activ",
+            "favorites": "Favorite",
+            "visits": "Vizite",
+            "maxPlayers": "Număr maxim de jucători",
+            "genre": "Gen",
+            "created": "Creat",
+            "updated": "Actualizat",
+            "voiceChat": "Chat vocal",
+            "supported": "Acceptat",
+            "unsupported": "Neacceptat"
+        },
+        "reportAbuse": "Raportează abuz",
+        "badges": {
+            "title": "Insigne",
+            "noBadges": "Încă nu există insigne",
+            "rarity": "Raritate",
+            "wonYesterday": "Obținute ieri",
+            "wonEver": "Obținute vreodată"
+        },
+        "subscriptions": {
+            "title": "Abonamente",
+            "subscribe": "Abonează-te"
+        },
+        "passes": {
+            "title": "Gamepass-uri",
+            "showOffSale": "Arată cele scoase din vânzare",
+            "noPasses": "Nu există pass-uri disponibile",
+            "offSale": "Scos din vânzare",
+            "owned": "Deținut",
+            "buy": "Cumpără"
+        },
+        "disabled": "Vizualizarea jocurilor private / moderate este dezactivată",
+        "disabledDescription": "Pentru a vedea jocurile private și moderate, trebuie să activezi această setare aici:",
+        "disabledLinkText": "Vizualizează jocurile private / moderate",
+        "products": {
+            "title": "Produse",
+            "buy": "Cumpără"
+        }
+    },
+    "playabilityStatus": {
+        "0": "Această experiență este indisponibilă",
+        "1": "Această experiență poate fi jucată",
+        "2": "Vizitatorii nu se pot alătura acestei experiențe",
+        "3": "Această experiență a fost moderată deoarece a încălcat Standardele comunității Roblox",
+        "4": "Această experiență este configurată incorect",
+        "5": "Această experiență este privată",
+        "6": "Doar prietenii se pot alătura acestei experiențe",
+        "7": "Doar membrii comunității se pot alătura acestei experiențe",
+        "8": "Această experiență este restricționată pe dispozitivul tău",
+        "9": "Această experiență este în curs de verificare deoarece a încălcat Standardele comunității Roblox",
+        "10": "Este necesară o achiziție pentru a juca",
+        "11": "Contul tău este restricționat",
+        "12": "Această experiență este temporar indisponibilă",
+        "13": "Această experiență nu are nicio versiune publicată",
+        "14": "Această experiență este blocată din motive de conformitate",
+        "15": "Această experiență nu este disponibilă în regiunea ta",
+        "16": "Această experiență este blocată din motive regionale de conformitate",
+        "17": "Această experiență este restricționată de controlul parental",
+        "18": "Această experiență este blocată de controlul parental",
+        "19": "Această experiență este restricționată de vârstă",
+        "20": "Este necesară verificarea pentru experiențele 18+",
+        "21": "Este necesară o achiziție pentru a juca",
+        "22": "Achiziția este restricționată pe acest dispozitiv",
+        "23": "Această experiență nu este clasificată",
+        "24": "Această experiență este restricționată de vârstă din cauza descriptorului de conținut",
+        "25": "Această experiență este disponibilă",
+        "unknown": "Această experiență este indisponibilă"
+    },
+    "bannedUsers": {
+        "connections": "Prieteni",
+        "followers": "Urmăritori",
+        "following": "Urmărite",
+        "about": "Despre",
+        "creations": "Creații",
+        "experiences": "Experiențe",
+        "bannedStatus": "Interzis",
+        "seeAll": "Vezi tot",
+        "hiddenUser": "Utilizator ascuns",
+        "communities": "Comunități",
+        "badges": "Insigne",
+        "noExperiences": "Acest utilizator nu are experiențe publice.",
+        "favorites": "Favorite",
+        "joinedDate": "S-a alăturat",
+        "store": "Magazin",
+        "members": "Membri",
+        "accountForgotten": "Cont uitat"
     }
 }
