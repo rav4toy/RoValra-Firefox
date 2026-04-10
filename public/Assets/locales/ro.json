@@ -493,7 +493,7 @@
         "thanksDownloading": "Mulțumim că ai descărcat Roblox",
         "downloadInstructions": "Urmează pașii de mai jos pentru a instala Roblox. Descărcarea ar trebui să înceapă în câteva secunde. Dacă nu începe, <a id=\"rovalra-restart-download\" href=\"#\" class=\"download-link-underline\">repornește descărcarea</a>.",
         "installInstructions": "Instrucțiuni de instalare",
-        "step1": "După descărcare, fă dublu click pe fișierul <b>RobloxPlayerInstaller.exe</b> din folderul Descărcări.",
+        "step1": "După descărcare, fă dublu click pe aplicația <b>RobloxPlayerInstaller.exe</b> din folderul Descărcări.",
         "step2": "Fă dublu click pe <b>RobloxPlayerInstaller</b> pentru a instala aplicația.",
         "step3": "Urmează instrucțiunile pentru a instala Roblox pe computerul tău.",
         "step4": "Acum că este instalat, <a id=\"download-join-experience\" class=\"download-link-underline\" style=\"cursor: pointer;\">intră în experiență</a>.",
