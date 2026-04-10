@@ -152,7 +152,7 @@
         "collectiblesTitleValue": "Colecționabilele lui {{displayName}} ({{totalRapString}} Valoare)"
     },
     "firstAccount": {
-        "label": "Primul Cont",
+        "label": "Primul Cont Creat",
         "yes": "Da",
         "no": "Nu",
         "tooltip": "Aceasta arată dacă Roblox crede că acesta este primul tău cont. <br>Această informație vine direct de la Roblox, dar se poate să nu fie corectă.",
