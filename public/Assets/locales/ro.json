@@ -139,7 +139,7 @@
     "rap": {
         "error": "Eroare",
         "private": "Privat",
-        "openInRolimons": "Deschis în Rolimon's",
+        "openInRolimons": "Deschide în Rolimon's",
         "thisUser": "acest utilizator",
         "rolimonsRedirect": "Vei fi direcționat către profilul lui {{username}} pe Rolimon's, un site extern pentru trading și valori ale itemilor.<br><br>Dorești să continui?",
         "continueToRolimons": "Continuă către Rolimon's",
