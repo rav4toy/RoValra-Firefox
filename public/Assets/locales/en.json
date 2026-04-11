@@ -302,6 +302,9 @@
         "pending": "Pending:",
         "noPermissions": "No Permission"
     },
+    "navigation": {
+        "transactions": "My Transactions"
+    },
     "betaPrograms": {
         "toggleTooltip": "Toggle Beta Programs",
         "noPrograms": "You are not enrolled into any beta programs.",
@@ -697,5 +700,21 @@
         "store": "Store",
         "members": "Members",
         "accountForgotten": "Account Forgotten"
+    },
+    "copyId": {
+        "copyId": "Copy {{type}} ID",
+        "copyUniverseId": "Copy Universe ID",
+        "types": {
+            "bundle": "Bundle",
+            "asset": "Asset",
+            "gamePass": "GamePass",
+            "badge": "Badge",
+            "community": "Community",
+            "event": "Event",
+            "developerProduct": "Developer Product",
+            "place": "Place",
+            "universe": "Universe",
+            "user": "User"
+        }
     }
 }

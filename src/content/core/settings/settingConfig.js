@@ -190,6 +190,8 @@ export const SETTINGS_CONFIG = {
                 ],
                 type: 'checkbox',
                 default: false,
+                locked: 'Feature broke and Roblox made their own version.',
+                isPermanent: true,
                 childSettings: {
                     Enableautoplay: {
                         label: 'Auto Play Trailer',
@@ -889,6 +891,13 @@ export const SETTINGS_CONFIG = {
                 label: 'Adds a beta programs toggle to the navigation bar',
                 description:
                     'This allows you to toggle beta programs you are enrolled into easily.',
+                type: 'checkbox',
+                default: false,
+            },
+            transactionsSidebarLinkEnabled: {
+                label: 'My Transactions sidebar link',
+                description:
+                    'Adds a My Transactions link below Communities in the Roblox sidebar.',
                 type: 'checkbox',
                 default: false,
             },
