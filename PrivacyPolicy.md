@@ -4,7 +4,7 @@
 
 **Introduction**
 
-This Privacy Policy describes how the Firefox Chrome extension ("the Extension") handles user data. We are committed to protecting your privacy and ensuring transparency about our data practices.
+This Privacy Policy describes how the RoValra Firefox extension ("the Extension") handles user data. We are committed to protecting your privacy and ensuring transparency about our data practices.
 
 **1. Information Collection: General Users vs. Donators**
 
