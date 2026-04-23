@@ -1,5 +1,5 @@
 /*!
- * rovalra v2.4.11
+ * rovalra v2.4.15
  * License: GPL-3.0
  * Repository: https://github.com/NotValra/RoValra
  * This extension is provided AS-IS without warranty.
@@ -9,11 +9,11 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
 (function() {
   "use strict";
   function unpack(detail) {
+	/*__rav4*/
     if (!detail) return {};
     try {
       if (detail._ff) return JSON.parse(detail._ff);
-    } catch {
-    }
+    } catch {}
     return detail;
   }
   __name(unpack, "unpack");
@@ -129,29 +129,21 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
       count: sphereGeo.indices.length
     }, ctx = canvas2D.getContext("2d", { alpha: !0 }), markers = [], REGIONS) {
       const mRad = CONFIG.RADIUS * 1.003;
-      const pushMarker = /* @__PURE__ */ __name((code, region) => {
-        if (!region) return;
-        let lat = null, lon = null;
-        if (region.coords && Number.isFinite(region.coords.lat) && Number.isFinite(region.coords.lon)) lat = region.coords.lat, lon = region.coords.lon;
-        else if (Number.isFinite(region.latitude) && Number.isFinite(region.longitude)) lat = region.latitude, lon = region.longitude;
-        else if (Array.isArray(region.latLong) && region.latLong.length >= 2) lat = parseFloat(region.latLong[0]), lon = parseFloat(region.latLong[1]);
-        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
-        const p = latLonToVector3(lat, lon, mRad);
-        markers.push({
-          x: p.x,
-          y: p.y,
-          z: p.z,
-          code,
-          city: region.city || region.name || code,
-          country: region.countryName || region.country || "",
-          hasServers: (serverCountsData[code] || 0) > 0
+      Object.values(REGIONS).forEach((continent) => {
+        Object.entries(continent).forEach(([code, region]) => {
+          if (region.coords) {
+            const p = latLonToVector3(region.coords.lat, region.coords.lon, mRad);
+            markers.push({
+              x: p.x,
+              y: p.y,
+              z: p.z,
+              code,
+              city: region.city,
+              country: region.country,
+              hasServers: (serverCountsData[code] || 0) > 0
+            });
+          }
         });
-      }, "pushMarker");
-      Object.entries(REGIONS).forEach(([code, region]) => {
-        if (region && typeof region == "object") {
-          if (region.coords || Number.isFinite(region.latitude) || Array.isArray(region.latLong)) pushMarker(code, region);
-          else Object.entries(region).forEach(([innerCode, innerRegion]) => pushMarker(innerCode, innerRegion));
-        }
       });
     }
     setupInteraction(canvas2D);

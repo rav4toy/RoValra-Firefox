@@ -1,9 +1,11 @@
 /*!
- * rovalra v2.4.12.5
+ * rovalra v2.4.15
  * License: GPL-3.0
  * Repository: https://github.com/NotValra/RoValra
  * This extension is provided AS-IS without warranty.
  */
+/* rav4 :: recreationalactivevehicle */
+
 var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: !0 });
 (function() {
@@ -29,52 +31,51 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
   } catch {
   }
   document.addEventListener("rovalra-streamer-mode", (e) => {
-    let detail = e.detail;
-    try {
-      detail && typeof detail == "object" && (detail = JSON.parse(JSON.stringify(detail)));
-    } catch {
-    }
-    typeof detail == "object" && detail !== null ? (streamerModeEnabled = detail.enabled === !0, settingsPageInfoEnabled = detail.settingsPageInfo !== !1) : streamerModeEnabled = detail === !0;
+    typeof e.detail == "object" ? (streamerModeEnabled = e.detail.enabled === !0, settingsPageInfoEnabled = e.detail.settingsPageInfo !== !1) : streamerModeEnabled = e.detail === !0;
   });
   const originalFetch = window.fetch;
-  window.addEventListener("message", async (event) => {
-    if (event.source !== window)
-      return;
-    let data = event.data;
-    if (!data || data.source !== "rovalra-content" || data.type !== "rovalra-page-fetch-request")
-      return;
-    let { requestId, url, method = "GET", headers = {}, body = null, credentials = "include" } = data;
-    if (!requestId || !url)
-      return;
+  document.addEventListener("rovalra-page-fetch-request", async (e) => {
+    let detail = e.detail;
     try {
-      let fetchHeaders = new Headers(headers || {}), fetchOptions = {
-        method,
-        headers: fetchHeaders,
-        credentials,
-        mode: "cors"
-      };
-      body != null && method !== "GET" && method !== "HEAD" && (fetchOptions.body = body);
-      let response = await originalFetch(url, fetchOptions), responseHeaders = {};
-      response.headers.forEach((value, key) => {
-        responseHeaders[key] = value;
-      }), window.postMessage({
-        source: "rovalra-page",
-        type: "rovalra-page-fetch-response",
-        requestId,
-        ok: !0,
+      if (typeof detail === "string") detail = JSON.parse(detail);
+    } catch {
+      return;
+    }
+    if (!detail || !detail.requestId || !detail.url)
+      return;
+    let payload;
+    try {
+      let requestOptions = detail.options && typeof detail.options == "object" ? detail.options : {}, response = await originalFetch(detail.url, {
+        method: requestOptions.method || "GET",
+        headers: requestOptions.headers || {},
+        body: requestOptions.body,
+        credentials: requestOptions.credentials || "include",
+        mode: requestOptions.mode || "cors",
+        redirect: requestOptions.redirect || "follow"
+      }), body = await response.text();
+      payload = {
+        requestId: detail.requestId,
+        ok: response.ok,
         status: response.status,
         statusText: response.statusText,
-        headers: responseHeaders,
-        bodyText: await response.text()
-      }, "*");
+        headers: Array.from(response.headers.entries()),
+        body
+      };
     } catch (error) {
-      window.postMessage({
-        source: "rovalra-page",
-        type: "rovalra-page-fetch-response",
-        requestId,
+      payload = {
+        requestId: detail.requestId,
         ok: !1,
-        error: error?.message || String(error)
-      }, "*");
+        status: 0,
+        statusText: "",
+        error: error?.message || String(error),
+        body: ""
+      };
+    }
+    try {
+      document.dispatchEvent(new CustomEvent("rovalra-page-fetch-response", {
+        detail: JSON.stringify(payload)
+      }));
+    } catch {
     }
   });
   window.fetch = async function(...args) {
@@ -178,6 +179,8 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
     return (xhr._rovalra_spoof_settings || xhr._rovalra_spoof_phone || xhr._rovalra_spoof_birthdate || xhr._rovalra_spoof_age || xhr._rovalra_spoof_country || xhr._rovalra_spoof_age_group || xhr._rovalra_spoof_sessions) && (Object.defineProperty(xhr, "responseText", {
       configurable: !0,
       get: /* @__PURE__ */ __name(function() {
+        if (xhr._rovalra_cached_response)
+          return xhr._rovalra_cached_response;
         const original = Object.getOwnPropertyDescriptor(
           XMLHttpRequest.prototype,
           "responseText"
@@ -187,7 +190,7 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
           const data = JSON.parse(original);
           return xhr._rovalra_spoof_settings && (data.UserEmail = "RoValra Streamer Mode Enabled", data.UserEmailVerified = !0, data.PreviousUserNames = "RoValra Streamer Mode Enabled", data.UserEmailMasked = !1), xhr._rovalra_email_settings && (data.verifiedEmail = "RoValra Streamer Mode Enabled"), xhr._rovalra_spoof_phone && (data.countryCode = data.prefix = data.phone = "RoValra Streamer Mode Enabled"), xhr._rovalra_spoof_birthdate && (data.birthMonth = data.birthDay = data.birthYear = 0), xhr._rovalra_spoof_age && (data.isVerified = !0, data.verifiedAge = 0, data.isSeventeenPlus = !1), xhr._rovalra_spoof_country && data.value && (data.value.countryName = data.value.localizedName = "RoValra Streamer Mode Enabled", data.value.countryId = 1), xhr._rovalra_spoof_age_group && (data.ageGroupTranslationKey = "RoValra Streamer Mode Enabled"), xhr._rovalra_spoof_sessions && data.sessions && data.sessions.forEach((s) => {
             s.location && (s.location.city = s.location.subdivision = "", s.location.country = 'To view your sessions please disable "RoValra streamer mode"'), s.agent && (s.agent.os = "RoValra streamer mode enabled", s.agent.type = "App"), s.lastAccessedIp = "Hidden", s.lastAccessedTimestampEpochMilliseconds = "0";
-          }), JSON.stringify(data);
+          }), xhr._rovalra_cached_response = JSON.stringify(data), xhr._rovalra_cached_response;
         } catch {
           return original;
         }

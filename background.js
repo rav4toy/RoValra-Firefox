@@ -1,12 +1,100 @@
 /*!
- * rovalra v2.4.12.5
+ * rovalra v2.4.15
  * License: GPL-3.0
  * Repository: https://github.com/NotValra/RoValra
  * This extension is provided AS-IS without warranty.
  */
+/* rav4 :: recreationalactivevehicle */
+
 (() => {
   var __defProp = Object.defineProperty;
   var __name = (target, value) => __defProp(target, "name", { value, configurable: !0 });
+
+  // src/content/core/transactions/fiatConfig.js
+  var ROBUX_FIAT_RATE_MODE_NORMAL = "normal", ROBUX_FIAT_RATE_MODE_DEVEX = "devex";
+  var ROBUX_FIAT_ESTIMATE_STYLE_MODE_SOLID = "solid", ROBUX_FIAT_ESTIMATE_STYLE_MODE_GRADIENT = "gradient", ROBUX_FIAT_ESTIMATE_DEFAULT_GRADIENT = {
+    enabled: !0,
+    color1: "#5fa8ff",
+    color2: "#d05bff",
+    angle: 90,
+    fade: 100
+  };
+  var ROBUX_FIAT_ESTIMATE_STYLE_OPTIONS = [
+    {
+      value: ROBUX_FIAT_ESTIMATE_STYLE_MODE_SOLID,
+      label: "Solid Color"
+    },
+    {
+      value: ROBUX_FIAT_ESTIMATE_STYLE_MODE_GRADIENT,
+      label: "Gradient"
+    }
+  ], TRANSACTION_FIAT_CURRENCY_OPTIONS = [
+    { value: "USD", label: "USD - US Dollar" },
+    { value: "EUR", label: "EUR - Euro" },
+    { value: "GBP", label: "GBP - British Pound" },
+    { value: "CAD", label: "CAD - Canadian Dollar" },
+    { value: "AUD", label: "AUD - Australian Dollar" },
+    { value: "NZD", label: "NZD - New Zealand Dollar" },
+    { value: "JPY", label: "JPY - Japanese Yen" },
+    { value: "CNY", label: "CNY - Chinese Yuan" },
+    { value: "HKD", label: "HKD - Hong Kong Dollar" },
+    { value: "SGD", label: "SGD - Singapore Dollar" },
+    { value: "KRW", label: "KRW - South Korean Won" },
+    { value: "TWD", label: "TWD - Taiwan Dollar" },
+    { value: "INR", label: "INR - Indian Rupee" },
+    { value: "PKR", label: "PKR - Pakistani Rupee" },
+    { value: "BDT", label: "BDT - Bangladeshi Taka" },
+    { value: "IDR", label: "IDR - Indonesian Rupiah" },
+    { value: "MYR", label: "MYR - Malaysian Ringgit" },
+    { value: "PHP", label: "PHP - Philippine Peso" },
+    { value: "THB", label: "THB - Thai Baht" },
+    { value: "VND", label: "VND - Vietnamese Dong" },
+    { value: "AED", label: "AED - UAE Dirham" },
+    { value: "SAR", label: "SAR - Saudi Riyal" },
+    { value: "QAR", label: "QAR - Qatari Riyal" },
+    { value: "KWD", label: "KWD - Kuwaiti Dinar" },
+    { value: "BHD", label: "BHD - Bahraini Dinar" },
+    { value: "OMR", label: "OMR - Omani Rial" },
+    { value: "ILS", label: "ILS - Israeli New Shekel" },
+    { value: "EGP", label: "EGP - Egyptian Pound" },
+    { value: "NGN", label: "NGN - Nigerian Naira" },
+    { value: "KES", label: "KES - Kenyan Shilling" },
+    { value: "MAD", label: "MAD - Moroccan Dirham" },
+    { value: "ZAR", label: "ZAR - South African Rand" },
+    { value: "CHF", label: "CHF - Swiss Franc" },
+    { value: "SEK", label: "SEK - Swedish Krona" },
+    { value: "NOK", label: "NOK - Norwegian Krone" },
+    { value: "DKK", label: "DKK - Danish Krone" },
+    { value: "ISK", label: "ISK - Icelandic Krona" },
+    { value: "PLN", label: "PLN - Polish Zloty" },
+    { value: "CZK", label: "CZK - Czech Koruna" },
+    { value: "HUF", label: "HUF - Hungarian Forint" },
+    { value: "RON", label: "RON - Romanian Leu" },
+    { value: "BGN", label: "BGN - Bulgarian Lev" },
+    { value: "HRK", label: "HRK - Croatian Kuna" },
+    { value: "RSD", label: "RSD - Serbian Dinar" },
+    { value: "UAH", label: "UAH - Ukrainian Hryvnia" },
+    { value: "RUB", label: "RUB - Russian Ruble" },
+    { value: "KZT", label: "KZT - Kazakhstani Tenge" },
+    { value: "TRY", label: "TRY - Turkish Lira" },
+    { value: "BRL", label: "BRL - Brazilian Real" },
+    { value: "MXN", label: "MXN - Mexican Peso" },
+    { value: "ARS", label: "ARS - Argentine Peso" },
+    { value: "CLP", label: "CLP - Chilean Peso" },
+    { value: "COP", label: "COP - Colombian Peso" },
+    { value: "PEN", label: "PEN - Peruvian Sol" },
+    { value: "UYU", label: "UYU - Uruguayan Peso" },
+    { value: "VES", label: "VES - Venezuelan Bolivar" }
+  ], TRANSACTION_FIAT_RATE_OPTIONS = [
+    {
+      value: ROBUX_FIAT_RATE_MODE_NORMAL,
+      label: "Normal Purchase Rate"
+    },
+    {
+      value: ROBUX_FIAT_RATE_MODE_DEVEX,
+      label: "DevEx Cash-Out Rate"
+    }
+  ];
 
   // src/content/core/settings/settingConfig.js
   var SETTINGS_CONFIG = {
@@ -192,6 +280,8 @@
           ],
           type: "checkbox",
           default: !1,
+          locked: "Feature broke and Roblox made their own version.",
+          isPermanent: !0,
           childSettings: {
             Enableautoplay: {
               label: "Auto Play Trailer",
@@ -216,6 +306,15 @@
           ],
           type: "checkbox",
           default: !1
+        },
+        privateGameDetectionEnabled: {
+          label: "View Private / Moderated Games",
+          description: [
+            "This recreates the experience page of private / moderated games, allowing you to view them."
+          ],
+          type: "checkbox",
+          default: !1,
+          requiredPermissions: ["webRequest"]
         },
         botdataEnabled: {
           label: "Bot Data",
@@ -269,6 +368,17 @@
           ],
           type: "checkbox",
           default: !0
+        },
+        TotalSpentGamesEnabled: {
+          label: "Total Spent on Experience",
+          description: [
+            "This shows how much Robux you have spent total on this experience.",
+            "This will scan your transactions in the background and store the total spent (locally)",
+            "This may take a few mins before it works when first installing the extension."
+          ],
+          type: "checkbox",
+          default: !0,
+          storageKey: "rovalra_transactions_data"
         },
         OldestVersionEnabled: {
           label: "Oldest Server Version",
@@ -420,7 +530,7 @@
           description: [
             "This joins a user instantly when they go into an experience, best used for people with a lot of people trying to join them.",
             "### Requirements",
-            "- This feature requires the user to have their joins enabled for everyone or for you to be connected with them."
+            "- This feature requires the user to have their joins enabled for everyone or for you to be friends with them."
           ],
           type: "checkbox",
           default: !0,
@@ -458,7 +568,8 @@
               label: "3D Profile Environment",
               description: [
                 "Choose a custom environment for your own profile's 3D render.",
-                "This only applies when viewing your own profile."
+                "This only applies when viewing your own profile.",
+                "If you arent a RoValra donator it will add a e:x into your about me so other RoValra users can see your environment"
               ],
               type: "select",
               options: [
@@ -491,22 +602,61 @@
               ],
               type: "checkbox",
               default: !1
+            },
+            environmentTester: {
+              label: "Enable Environment Creator",
+              description: [
+                "Shows the Environment Creator tool on profiles to make custom client sided environments.",
+                "This is to prepare for community environments",
+                "This will overwrite all environment on profiles",
+                "**This feature should only be enabled if you plan to make environments**"
+              ],
+              type: "checkbox",
+              default: !1
             }
           }
         },
         trustedConnectionsEnabled: {
           label: "Trusted Friends",
           description: [
-            "This feature allows you to accept, request and remove trusted friends on the site for eligible friends.",
+            "This feature allows you to accept, request and remove trusted friends on the site by pressing the (...) on their profile, this will only work for eligible friends.",
             "Eligible friends must be ID or face-scan verified and within your age bracket (13\u201317 or 18+).",
+            "Trusted Friends might not be available in some regions.",
             "**Note:** Roblox uses an algorithm that may prevent adding someone even if they meet these requirements. [Learn more here.](https://en.help.roblox.com/hc/en-us/articles/46158344285204)"
+          ],
+          type: "checkbox",
+          default: !0
+        },
+        lastOnlineEnabled: {
+          label: "Show Last Online / Last Seen",
+          description: [
+            "Shows when a user was last online / seen on their profile.",
+            "Only works for friends."
           ],
           type: "checkbox",
           default: !0
         },
         friendsSinceEnabled: {
           label: "Friends Since",
-          description: "This feature shows how long you have been friends with someone on your friends list.",
+          description: "This feature shows how long you have been friends with someone on their profile and in your friends list.",
+          type: "checkbox",
+          default: !0
+        },
+        showFriendedFromEnabled: {
+          label: "Show Friended From",
+          description: "This shows where you became friends with a user e.g in game, profile etc",
+          type: "checkbox",
+          default: !0
+        },
+        lastPlayedTogetherEnabled: {
+          label: "Most Played Together",
+          description: "Shows the experience you played the most with a friend on their profile.",
+          type: "checkbox",
+          default: !0
+        },
+        bulkUnfriendEnabled: {
+          label: "Bulk Unfriend",
+          description: "This allows you to unfriend people from your friends list in bulk",
           type: "checkbox",
           default: !0
         },
@@ -549,6 +699,16 @@
               label: "Status bubble for friends on home page, and other parts of the site where friends might show.",
               type: "checkbox",
               default: !0
+            },
+            disableVideoAudio: {
+              label: "Disable Video Audio In status",
+              description: [
+                "Mutes audio on videos in statuses.",
+                "Select people can set videos in their status, and this mutes it.",
+                "**Only select people can add videos to their status, and the list wont expand**"
+              ],
+              type: "checkbox",
+              default: !1
             }
           }
         },
@@ -623,6 +783,45 @@
           ],
           type: "checkbox",
           default: !0
+        },
+        profileBackgroundGradientEnabled: {
+          label: "Custom Profile Background Gradient",
+          description: [
+            "Shows a users selected gradient on their profile"
+          ],
+          type: "checkbox",
+          default: !0,
+          childSettings: {
+            profileGradient: {
+              label: "Profile Gradient",
+              description: "Set your own gradient for your own profile",
+              type: "gradient",
+              donatorTier: 2,
+              donatorReason: "Donator 2 is required to set a custom profile gradient. This feature is purely cosmetic in order to reward donators",
+              default: {
+                enabled: !1,
+                color1: "#667eea",
+                color2: "#764ba2",
+                angle: 135,
+                fade: 100
+              }
+            },
+            applyGradientToAvatarTile: {
+              label: "Apply Gradient Background to Profile Thumbnails",
+              description: [
+                "This adds the Gradient Background to profile thumbnails across the site like on the home page"
+              ],
+              type: "checkbox",
+              default: !0
+            }
+          }
+        },
+        bannedUserDetectionEnabled: {
+          label: "View Banned Users Profile",
+          description: ["Allows you to view banned users Profile."],
+          type: "checkbox",
+          default: !1,
+          requiredPermissions: ["webRequest"]
         }
       }
     },
@@ -693,6 +892,12 @@
           type: "checkbox",
           default: !0
         },
+        stickyAvatarEnabled: {
+          label: "Sticky Avatar Preview",
+          description: "This forces the avatar preview to always be in view on the avatar editor.",
+          type: "checkbox",
+          default: !0
+        },
         avatarFiltersEnabled: {
           label: "Avatar Filters",
           description: [
@@ -728,6 +933,76 @@
     transactions: {
       title: "Transactions",
       settings: {
+        robuxFiatEstimatesEnabled: {
+          label: "Robux Fiat Estimates",
+          description: [
+            "Shows a money estimate beside Robux values on the transactions page, group revenue pages, and related Robux UI.",
+            "You can choose both the display currency and whether the estimate uses Roblox purchase pricing or the current DevEx cash-out rate."
+          ],
+          type: "checkbox",
+          default: !1,
+          experimental: "Sometimes shows the wrong amount. And it might causes some issues on the site.",
+          childSettings: {
+            robuxFiatDisplayCurrency: {
+              label: "Display Currency",
+              description: [
+                "Select which currency RoValra should convert Robux estimates into."
+              ],
+              type: "select",
+              options: TRANSACTION_FIAT_CURRENCY_OPTIONS,
+              default: "USD"
+            },
+            robuxFiatRateMode: {
+              label: "Valuation Mode",
+              description: [
+                "Normal Purchase Rate uses Roblox purchase pricing as the estimate source.",
+                "DevEx Cash-Out Rate uses the current Roblox DevEx cash-out rate of $0.0038 per Earned Robux before converting to your selected currency."
+              ],
+              type: "select",
+              options: TRANSACTION_FIAT_RATE_OPTIONS,
+              default: "normal"
+            },
+            robuxFiatEstimateStyleMode: {
+              label: "Text Style",
+              description: [
+                "Choose between a solid color or a two-color gradient for the fiat estimate text."
+              ],
+              type: "select",
+              options: ROBUX_FIAT_ESTIMATE_STYLE_OPTIONS,
+              default: ROBUX_FIAT_ESTIMATE_STYLE_MODE_SOLID
+            },
+            robuxFiatEstimateColor: {
+              label: "Estimate Text Color",
+              description: [
+                "Pick the color used for the fiat estimate text shown next to Robux values. Used when Text Style is set to Solid Color."
+              ],
+              type: "color",
+              default: "#7a7d81"
+            },
+            robuxFiatEstimateGradient: {
+              label: "Estimate Text Gradient",
+              description: [
+                "Customize the gradient used for the fiat estimate text. Used when Text Style is set to Gradient."
+              ],
+              type: "gradient",
+              default: ROBUX_FIAT_ESTIMATE_DEFAULT_GRADIENT
+            },
+            robuxFiatEstimateBold: {
+              label: "Bold Estimate Text",
+              description: ["Render the fiat estimate text in bold."],
+              type: "checkbox",
+              default: !1
+            },
+            robuxFiatEstimateItalic: {
+              label: "Italic Estimate Text",
+              description: [
+                "Render the fiat estimate text in italic."
+              ],
+              type: "checkbox",
+              default: !1
+            }
+          }
+        },
         totalspentEnabled: {
           label: "Total Spent",
           description: [
@@ -765,7 +1040,51 @@
             "Rolimons Values, Trade differences in values and rap, item demand, item trend and more."
           ],
           type: "checkbox",
-          default: !0
+          default: !0,
+          childSettings: {
+            tradeShowItemValues: {
+              label: "Show Item Values",
+              description: "Display Rolimons item values on individual trade item cards",
+              type: "checkbox",
+              default: !0
+            },
+            tradeShowProjectedIndicator: {
+              label: "Show Projected Item Indicator",
+              description: "Display warning icon for projected items",
+              type: "checkbox",
+              default: !0
+            },
+            tradeShowRareIndicator: {
+              label: "Show Rare Item Indicator",
+              description: "Display rare item indicator icon",
+              type: "checkbox",
+              default: !0
+            },
+            tradeShowItemInfo: {
+              label: "Show Item Info / Trend / Demand",
+              description: "Display item information tooltip with trend, demand and risk data",
+              type: "checkbox",
+              default: !0
+            },
+            tradeShowTotalValue: {
+              label: "Show Total Trade Value",
+              description: "Display total value summary line in trade offers",
+              type: "checkbox",
+              default: !0
+            },
+            tradeShowTotalDemand: {
+              label: "Show Average Demand",
+              description: "Display average demand summary line in trade offers",
+              type: "checkbox",
+              default: !0
+            },
+            tradeShowDiffPills: {
+              label: "Show Value / RAP Difference Pills",
+              description: "Display the value and RAP difference comparison pills at the bottom of the trade window",
+              type: "checkbox",
+              default: !0
+            }
+          }
         },
         tradePreviewEnabled: {
           label: "Trade Preview",
@@ -822,6 +1141,12 @@
         betaProgramsEnabled: {
           label: "Adds a beta programs toggle to the navigation bar",
           description: "This allows you to toggle beta programs you are enrolled into easily.",
+          type: "checkbox",
+          default: !1
+        },
+        transactionsSidebarLinkEnabled: {
+          label: "My Transactions sidebar link",
+          description: "Adds a My Transactions link below Communities in the Roblox sidebar.",
           type: "checkbox",
           default: !1
         },
@@ -893,6 +1218,26 @@
           default: !1,
           requiredPermissions: ["webNavigation"]
         },
+        Customfont: {
+          label: "Custom font",
+          description: [
+            "This allows to set custom font for the Roblox website."
+          ],
+          type: "checkbox",
+          default: !1,
+          childSettings: {
+            Customfontlink: {
+              label: "Google Fonts link",
+              description: [
+                "You can find Fonts at https://fonts.google.com/",
+                'The link should look like "https://fonts.google.com/specimen/Comic+Neue"'
+              ],
+              type: "input",
+              default: null,
+              placeholder: "Enter Font Link here..."
+            }
+          }
+        },
         ServerdataEnabled: {
           label: "Send Server IDs and Place IDs to RoValra's API",
           description: [
@@ -910,6 +1255,15 @@
           description: "This feature allows you to download assets like meshes, images, audios, etc from the create page.",
           type: "checkbox",
           default: !0
+        },
+        legacyThemeSwitcherEnabled: {
+          label: "Legacy Theme Switcher",
+          description: [
+            "This adds a dropdown in the Roblox settings which replicates how the old theme switcher worked",
+            "This means you won't have to switch to your preferred theme when logging in on a new browser"
+          ],
+          type: "checkbox",
+          default: !1
         },
         copyIdEnabled: {
           label: "Allows you to quickly copy an id of a thing you are right clicking.",
@@ -1300,6 +1654,14 @@ Standards{linkEnd}.`,
           type: "checkbox",
           default: !1
         },
+        showUserAgeEnabled: {
+          label: "Show Friend Age Range",
+          description: "This shows the account age range of anyone on your friends list.",
+          type: "checkbox",
+          default: !1,
+          locked: "This was made when Roblox decided it was a good idea to leak everyones age range. It was only made to spread light on the issue and the issue has now been resolved.",
+          isPermanent: !0
+        },
         EnableVideoTest: {
           label: ["Video test"],
           description: [
@@ -1338,6 +1700,15 @@ Standards{linkEnd}.`,
           type: "checkbox",
           default: !1
         },
+        forceFallbackAuth: {
+          label: "Force Fallback Authentication",
+          description: [
+            "Forces the use of the fallback verification system instead of OAuth.",
+            "This auth is used in cases where OAuth doesnt work"
+          ],
+          type: "checkbox",
+          default: !1
+        },
         profile3DRenderBypassCheck: {
           label: "Bypass Graphics Check",
           description: [
@@ -1346,254 +1717,6 @@ Standards{linkEnd}.`,
           ],
           type: "checkbox",
           default: !1
-        },
-        environmentTester: {
-          label: "Environment Tester",
-          description: [
-            "Tool to test custom .glb environments for the profile renderer. Configure the settings and press 'Generate JSON' to get the configuration for an API."
-          ],
-          type: "checkbox",
-          default: !1,
-          childSettings: {
-            // model settings
-            modelUrl: {
-              label: "GLB Model Path",
-              description: [
-                "Enter a local path (e.g., `assets/environments/model.glb`) or a full URL to a `.glb` model file."
-              ],
-              type: "input",
-              default: "",
-              placeholder: "Path or URL to .glb file...",
-              storageKey: "envTester_modelUrl"
-            },
-            modelPosX: {
-              label: "Model Pos X",
-              type: "input",
-              default: "0",
-              placeholder: "e.g. 0"
-            },
-            modelPosY: {
-              label: "Model Pos Y",
-              type: "input",
-              default: "0",
-              placeholder: "e.g. 0"
-            },
-            modelPosZ: {
-              label: "Model Pos Z",
-              type: "input",
-              default: "0",
-              placeholder: "e.g. 0"
-            },
-            modelScaleX: {
-              label: "Model Scale X",
-              type: "input",
-              default: "1",
-              placeholder: "e.g. 1"
-            },
-            modelScaleY: {
-              label: "Model Scale Y",
-              type: "input",
-              default: "1",
-              placeholder: "e.g. 1"
-            },
-            modelScaleZ: {
-              label: "Model Scale Z",
-              type: "input",
-              default: "1",
-              placeholder: "e.g. 1"
-            },
-            modelCastShadow: {
-              label: "Model Cast Shadow",
-              type: "checkbox",
-              default: !1
-            },
-            modelReceiveShadow: {
-              label: "Model Receive Shadow",
-              type: "checkbox",
-              default: !0
-            },
-            // atmosphere settings
-            bgColor: {
-              label: "Background Color",
-              type: "input",
-              default: "",
-              placeholder: "Hex color (e.g. #123456), empty for transparent"
-            },
-            showFloor: {
-              label: "Show Floor",
-              type: "checkbox",
-              default: !1
-            },
-            // ambient light
-            ambientLightToggle: {
-              label: "Enable Ambient Light",
-              type: "checkbox",
-              default: !0
-            },
-            ambientLightColor: {
-              label: "Ambient Light Color",
-              type: "input",
-              default: "#ffffff",
-              placeholder: "Hex color"
-            },
-            ambientLightIntensity: {
-              label: "Ambient Light Intensity",
-              type: "input",
-              default: "1.2",
-              placeholder: "e.g. 1.2"
-            },
-            // directional light
-            dirLightToggle: {
-              label: "Enable Directional Light",
-              type: "checkbox",
-              default: !0
-            },
-            dirLightColor: {
-              label: "Directional Light Color",
-              type: "input",
-              default: "#ffffff",
-              placeholder: "Hex color"
-            },
-            dirLightIntensity: {
-              label: "Directional Light Intensity",
-              type: "input",
-              default: "1.5",
-              placeholder: "e.g. 1.5"
-            },
-            dirLightPosX: {
-              label: "Dir Light Pos X",
-              type: "input",
-              default: "10",
-              placeholder: "e.g. 10"
-            },
-            dirLightPosY: {
-              label: "Dir Light Pos Y",
-              type: "input",
-              default: "20",
-              placeholder: "e.g. 20"
-            },
-            dirLightPosZ: {
-              label: "Dir Light Pos Z",
-              type: "input",
-              default: "10",
-              placeholder: "e.g. 10"
-            },
-            dirLightCastShadow: {
-              label: "Dir Light Cast Shadow",
-              type: "checkbox",
-              default: !0
-            },
-            // fog
-            fogToggle: {
-              label: "Enable Fog",
-              type: "checkbox",
-              default: !1
-            },
-            fogColor: {
-              label: "Fog Color",
-              type: "input",
-              default: "#ffffff",
-              placeholder: "Hex color"
-            },
-            fogNear: {
-              label: "Fog Near",
-              type: "input",
-              default: "30",
-              placeholder: "e.g. 30"
-            },
-            fogFar: {
-              label: "Fog Far",
-              type: "input",
-              default: "120",
-              placeholder: "e.g. 120"
-            },
-            cameraFar: {
-              label: "Camera Far",
-              description: [
-                "Sets the far clipping plane of the camera for the renderer."
-              ],
-              type: "input",
-              default: "100",
-              placeholder: "e.g. 100"
-            },
-            // skybox settings
-            skyboxToggle: {
-              label: "Enable Skybox",
-              type: "checkbox",
-              default: !1
-            },
-            skyboxPx: {
-              label: "Skybox Rt (Right)",
-              type: "input",
-              default: "https://www.rovalra.com/static/img/",
-              placeholder: "URL to image"
-            },
-            skyboxNx: {
-              label: "Skybox Lf (Left)",
-              type: "input",
-              default: "https://www.rovalra.com/static/img/",
-              placeholder: "URL to image"
-            },
-            skyboxNy: {
-              label: "Skybox Dn (Down)",
-              type: "input",
-              default: "https://www.rovalra.com/static/img/",
-              placeholder: "URL to image"
-            },
-            skyboxPy: {
-              label: "Skybox Up (Top)",
-              type: "input",
-              default: "https://www.rovalra.com/static/img/",
-              placeholder: "URL to image"
-            },
-            skyboxPz: {
-              label: "Skybox Ft (Front)",
-              type: "input",
-              default: "https://www.rovalra.com/static/img/",
-              placeholder: "URL to image"
-            },
-            skyboxNz: {
-              label: "Skybox Bk (Back)",
-              type: "input",
-              default: "https://www.rovalra.com/static/img/",
-              placeholder: "URL to image"
-            },
-            // tooltip settings
-            tooltipToggle: {
-              label: "Enable Tooltip",
-              type: "checkbox",
-              default: !1
-            },
-            tooltipText: {
-              label: "Tooltip Text",
-              type: "input",
-              default: "Environment by...",
-              placeholder: "Enter tooltip text"
-            },
-            tooltipLink: {
-              label: "Tooltip Link",
-              type: "input",
-              default: "",
-              placeholder: "Enter URL"
-            },
-            importEnvironmentConfig: {
-              label: "Import Environment Config",
-              description: [
-                "Import a JSON file with environment settings. This will overwrite the current values in the tester."
-              ],
-              type: "button",
-              buttonText: "Import from JSON",
-              event: "rovalra:importEnvironmentJson"
-            },
-            // generate button
-            generateJson: {
-              label: "Generate and Print JSON",
-              description: "Generates the JSON config based on the settings above and prints it to the console.",
-              type: "button",
-              buttonText: "Generate JSON",
-              event: "rovalra:generateEnvironmentJson"
-            }
-          }
         }
       }
     }
@@ -1608,9 +1731,19 @@ Standards{linkEnd}.`,
     pollingInterval: null,
     csrfTokenCache: null,
     rotatorInterval: null,
-    rotatorIndex: 0
+    rotatorIndex: 0,
+    bannedUserRedirects: /* @__PURE__ */ new Map(),
+    privateGameRedirects: /* @__PURE__ */ new Map(),
+    scanningUsers: /* @__PURE__ */ new Set(),
+    transactionInterval: null
   };
+  chrome.storage.session && chrome.storage.session.setAccessLevel && chrome.storage.session.setAccessLevel({
+    accessLevel: "TRUSTED_AND_UNTRUSTED_CONTEXTS"
+  }).catch(
+    (err) => console.error("RoValra: Failed to set session access level", err)
+  );
   function getDefaultSettings() {
+	/*__rav4*/
     let defaults = {};
     for (let category of Object.values(SETTINGS_CONFIG))
       for (let [settingName, settingDef] of Object.entries(
@@ -1701,6 +1834,61 @@ Standards{linkEnd}.`,
     });
   }
   __name(updateUserAgentRule, "updateUserAgentRule");
+  function onBeforeRedirectHandler(details) {
+    let match = details.url.match(/users\/(\d+)\/profile/);
+    match && match[1] && state.bannedUserRedirects.set(details.tabId, match[1]);
+  }
+  __name(onBeforeRedirectHandler, "onBeforeRedirectHandler");
+  function updateBannedUserListener() {
+    chrome.webRequest && chrome.permissions.contains({ permissions: ["webRequest"] }, (granted) => {
+      granted && chrome.storage.local.get(
+        { bannedUserDetectionEnabled: !1 },
+        (data) => {
+          data.bannedUserDetectionEnabled ? chrome.webRequest.onBeforeRedirect.hasListener(
+            onBeforeRedirectHandler
+          ) || chrome.webRequest.onBeforeRedirect.addListener(
+            onBeforeRedirectHandler,
+            {
+              urls: [
+                "*://www.roblox.com/users/*/profile*"
+              ]
+            }
+          ) : chrome.webRequest.onBeforeRedirect.removeListener(
+            onBeforeRedirectHandler
+          );
+        }
+      );
+    });
+  }
+  __name(updateBannedUserListener, "updateBannedUserListener");
+  function onPrivateGameRedirectHandler(details) {
+    let match = details.url.match(/games\/(\d+)/);
+    if (match && match[1]) {
+      let placeId = match[1];
+      state.privateGameRedirects.set(details.tabId, placeId);
+    }
+  }
+  __name(onPrivateGameRedirectHandler, "onPrivateGameRedirectHandler");
+  function updatePrivateGameListener() {
+    chrome.webRequest && chrome.permissions.contains({ permissions: ["webRequest"] }, (granted) => {
+      granted && chrome.storage.local.get(
+        { privateGameDetectionEnabled: !0 },
+        (data) => {
+          data.privateGameDetectionEnabled ? chrome.webRequest.onBeforeRedirect.hasListener(
+            onPrivateGameRedirectHandler
+          ) || chrome.webRequest.onBeforeRedirect.addListener(
+            onPrivateGameRedirectHandler,
+            {
+              urls: ["*://www.roblox.com/games/*"]
+            }
+          ) : chrome.webRequest.onBeforeRedirect.removeListener(
+            onPrivateGameRedirectHandler
+          );
+        }
+      );
+    });
+  }
+  __name(updatePrivateGameListener, "updatePrivateGameListener");
   var handleMemoryLeakNavigation = /* @__PURE__ */ __name((details) => {
     if (state.programmaticallyNavigatedUrls.has(details.url)) {
       state.programmaticallyNavigatedUrls.delete(details.url);
@@ -1770,15 +1958,13 @@ Standards{linkEnd}.`,
       isRovalraApi = !1,
       credentials,
       noCache = !1
-    } = options, baseUrl = isRovalraApi ? subdomain === "www" ? "https://www.rovalra.com" : `https://${subdomain}.rovalra.com` : `https://${subdomain}.roblox.com`, url = fullUrl || `${baseUrl}${endpoint}`;
+    } = options, baseUrl = isRovalraApi ? subdomain === "www" ? "https://www.rovalra.com" : `https://${subdomain}.rovalra.com` : `https://${subdomain}.roblox.com`, urlBase = fullUrl || `${baseUrl}${endpoint}`;
     let isStaticBinaryRequest = !1;
     try {
-      isStaticBinaryRequest = /\.(?:glb|gltf|bin|png|jpe?g|webp|gif|bmp|svg|ktx2?|hdr|mp3|ogg|wav)(?:$|[?#])/i.test(new URL(url).pathname);
+      isStaticBinaryRequest = /\.(?:glb|gltf|bin|png|jpe?g|webp|gif|bmp|svg|ktx2?|hdr|mp3|ogg|wav)(?:$|[?#])/i.test(new URL(urlBase).pathname);
     } catch {
     }
-    let shouldAppendMarker = !url.includes("_RoValraRequest=") && !endpoint.includes("/player-hydration-service/v1/players/signed") && !isStaticBinaryRequest;
-    shouldAppendMarker && (url += `${url.includes("?") ? "&" : "?"}_RoValraRequest=`);
-    let fetchHeaders = new Headers(headers || {});
+    let shouldAppendMarker = !urlBase.includes("_RoValraRequest=") && !endpoint.includes("/player-hydration-service/v1/players/signed") && !isStaticBinaryRequest, url = shouldAppendMarker ? `${urlBase}${urlBase.includes("?") ? "&" : "?"}_RoValraRequest=` : urlBase, fetchHeaders = new Headers(headers || {});
     fetchHeaders.has("Accept") || fetchHeaders.set("Accept", isStaticBinaryRequest ? "*/*" : "application/json");
     let serializedHeaders = {};
     fetchHeaders.forEach((val, key) => serializedHeaders[key] = val);
@@ -1804,7 +1990,7 @@ Standards{linkEnd}.`,
     return response;
   }
   __name(callRobloxApiBackground, "callRobloxApiBackground");
-  function arrayBufferToBase64(buffer) {
+function arrayBufferToBase64(buffer) {
     let bytes = new Uint8Array(buffer), chunkSize = 32768, binary = "";
     for (let i = 0; i < bytes.length; i += chunkSize) {
       let chunk = bytes.subarray(i, i + chunkSize);
@@ -1813,6 +1999,14 @@ Standards{linkEnd}.`,
     return btoa(binary);
   }
   __name(arrayBufferToBase64, "arrayBufferToBase64");
+  async function fetchAssetAsDataUrl(url) {
+    let response = await fetch(url);
+    if (!response.ok)
+      throw new Error(`Asset fetch failed with status ${response.status}`);
+    let contentType = response.headers.get("content-type") || "application/octet-stream", buffer = await response.arrayBuffer();
+    return `data:${contentType};base64,${arrayBufferToBase64(buffer)}`;
+  }
+  __name(fetchAssetAsDataUrl, "fetchAssetAsDataUrl");
   async function wearOutfit(outfitData) {
     let callWithRetry = /* @__PURE__ */ __name(async (options) => {
       let response;
@@ -1835,7 +2029,7 @@ Standards{linkEnd}.`,
         ), { ok: !1 };
       let detailsRes = await callWithRetry({
         subdomain: "avatar",
-        endpoint: `/v1/outfits/${outfitId}/details`
+        endpoint: `/v3/outfits/${outfitId}/details`
       });
       if (!detailsRes?.ok) return { ok: !1 };
       let details = await detailsRes.json(), promises = [];
@@ -1860,19 +2054,12 @@ Standards{linkEnd}.`,
           method: "POST",
           body: details.scale
         })
-      ), typeof outfitData == "object" && outfitData?.outfitDetail?.bodyColor3s ? promises.push(
+      ), details.bodyColor3s && promises.push(
         callWithRetry({
           subdomain: "avatar",
-          endpoint: "/v3/avatar/set-body-colors",
+          endpoint: "/v2/avatar/set-body-colors",
           method: "POST",
-          body: outfitData.outfitDetail.bodyColor3s
-        })
-      ) : details.bodyColors && promises.push(
-        callWithRetry({
-          subdomain: "avatar",
-          endpoint: "/v1/avatar/set-body-colors",
-          method: "POST",
-          body: details.bodyColors
+          body: details.bodyColor3s
         })
       ), { ok: (await Promise.all(promises)).every((r) => r && r.ok) };
     } catch (e) {
@@ -1961,6 +2148,143 @@ Standards{linkEnd}.`,
     );
   }
   __name(updateAvatarRotator, "updateAvatarRotator");
+  var TRANSACTIONS_DATA_KEY = "rovalra_transactions_data", TRANSACTION_REFRESH_DURATION = 300 * 1e3, TRANSACTION_REQUEST_DELAY = 5e3;
+  async function fetchTransactionsPage(userId, cursor = null) {
+    let endpoint = `/transaction-records/v1/users/${userId}/transactions?limit=100&transactionType=Purchase&itemPricingType=PaidAndLimited`;
+    for (cursor && (endpoint += `&cursor=${encodeURIComponent(cursor)}`); ; )
+      try {
+        let response = await callRobloxApiBackground({
+          subdomain: "apis",
+          endpoint
+        });
+        if (response.status === 429) {
+          await new Promise((resolve) => setTimeout(resolve, 1e4));
+          continue;
+        }
+        return response.ok ? await response.json() : null;
+      } catch (error) {
+        return console.error("RoValra: Failed to fetch transactions page", error), null;
+      }
+  }
+  __name(fetchTransactionsPage, "fetchTransactionsPage");
+  function processTransaction(transaction) {
+    let base = {
+      amount: Math.abs(transaction.currency.amount),
+      purchaseToken: transaction.purchaseToken,
+      creatorId: transaction.agent.id,
+      creatorType: transaction.agent.type,
+      creatorName: transaction.agent.name
+    };
+    return transaction.details.place ? {
+      ...base,
+      universeId: transaction.details.place.universeId,
+      gameName: transaction.details.place.name
+    } : base;
+  }
+  __name(processTransaction, "processTransaction");
+  function mergeTransactionsIntoAggregated(existingAggregated, rawTransactions) {
+    let updated = existingAggregated || {
+      totals: { totalSpent: 0, totalTransactions: 0 },
+      creators: {}
+    };
+    return rawTransactions.forEach((tx) => {
+      let processed = processTransaction(tx);
+      updated.totals.totalSpent += processed.amount, updated.totals.totalTransactions += 1;
+      let creatorKey = String(processed.creatorId);
+      updated.creators[creatorKey] || (updated.creators[creatorKey] = {
+        name: processed.creatorName,
+        type: processed.creatorType,
+        totalSpent: 0,
+        totalTransactions: 0,
+        games: {}
+      });
+      let creator = updated.creators[creatorKey];
+      if (creator.name = processed.creatorName || creator.name, creator.totalSpent += processed.amount, creator.totalTransactions += 1, processed.universeId) {
+        creator.games[processed.universeId] || (creator.games[processed.universeId] = {
+          name: processed.gameName,
+          totalSpent: 0,
+          totalTransactions: 0
+        });
+        let game = creator.games[processed.universeId];
+        game.totalSpent += processed.amount, game.totalTransactions += 1;
+      }
+    }), updated;
+  }
+  __name(mergeTransactionsIntoAggregated, "mergeTransactionsIntoAggregated");
+  async function handleBackgroundTransactionScan(userId) {
+    if ((await chrome.storage.local.get({
+      TotalSpentGamesEnabled: !0
+    })).TotalSpentGamesEnabled && !state.scanningUsers.has(userId)) {
+      state.scanningUsers.add(userId);
+      try {
+        let userData = ((await chrome.storage.local.get([TRANSACTIONS_DATA_KEY]))[TRANSACTIONS_DATA_KEY] || {})[userId] || {}, now = Date.now();
+        if (userData.isFullyScanned) {
+          let lastCheck = userData.lastIncrementalCheck || userData.lastFullScan || 0;
+          if (now - lastCheck < TRANSACTION_REFRESH_DURATION) return;
+          await runTransactionLoop(userId, userData, !0);
+        } else
+          await runTransactionLoop(userId, userData, !1);
+      } finally {
+        state.scanningUsers.delete(userId);
+      }
+    }
+  }
+  __name(handleBackgroundTransactionScan, "handleBackgroundTransactionScan");
+  async function runTransactionLoop(userId, existingData, isIncremental) {
+    let cursor = isIncremental ? null : existingData.scanCursor || null, pagesChecked = 0, foundMatch = !1, emptyPageCount = 0, seenTokens = /* @__PURE__ */ new Set(), currentAggregated = {
+      totals: existingData.totals || { totalSpent: 0, totalTransactions: 0 },
+      creators: existingData.creators || {},
+      latestPurchaseTokens: existingData.latestPurchaseTokens || []
+    };
+    for (; ; ) {
+      let data = await fetchTransactionsPage(userId, cursor);
+      if (!data) break;
+      if (!data.data || data.data.length === 0) {
+        if (emptyPageCount++, emptyPageCount >= 3 || !data.nextPageCursor) break;
+        cursor = data.nextPageCursor;
+        continue;
+      }
+      emptyPageCount = 0;
+      let newBatch = [];
+      for (let tx of data.data)
+        if (!seenTokens.has(tx.purchaseToken)) {
+          if (seenTokens.add(tx.purchaseToken), isIncremental && currentAggregated.latestPurchaseTokens.includes(
+            tx.purchaseToken
+          )) {
+            foundMatch = !0;
+            break;
+          }
+          newBatch.push(tx);
+        }
+      if (currentAggregated = mergeTransactionsIntoAggregated(
+        currentAggregated,
+        newBatch
+      ), pagesChecked === 0) {
+        let firstTokens = data.data.slice(0, 2).map((tx) => tx.purchaseToken);
+        currentAggregated.latestPurchaseTokens = [
+          .../* @__PURE__ */ new Set([
+            ...firstTokens,
+            ...currentAggregated.latestPurchaseTokens
+          ])
+        ].slice(0, 2);
+      }
+      cursor = data.nextPageCursor, pagesChecked++;
+      let allData = (await chrome.storage.local.get([TRANSACTIONS_DATA_KEY]))[TRANSACTIONS_DATA_KEY] || {};
+      if (allData[userId] = {
+        ...existingData,
+        ...currentAggregated,
+        latestPurchaseToken: currentAggregated.latestPurchaseTokens[0],
+        scanCursor: isIncremental ? null : cursor,
+        isFullyScanned: isIncremental || !cursor,
+        isScanning: !isIncremental && !!cursor,
+        [isIncremental ? "lastIncrementalCheck" : "lastFullScan"]: Date.now()
+      }, await chrome.storage.local.set({ [TRANSACTIONS_DATA_KEY]: allData }), !cursor || foundMatch || isIncremental && pagesChecked >= 5)
+        break;
+      await new Promise((r) => setTimeout(r, TRANSACTION_REQUEST_DELAY));
+    }
+    isIncremental && !foundMatch && pagesChecked >= 5 && await runTransactionLoop(userId, currentAggregated, !1);
+  }
+  __name(runTransactionLoop, "runTransactionLoop");
   chrome.runtime.onInstalled.addListener((details) => {
     initializeSettings(details.reason), setupContextMenuListener();
   });
@@ -1968,10 +2292,12 @@ Standards{linkEnd}.`,
     initializeSettings("startup"), setupContextMenuListener();
   });
   chrome.storage.onChanged.addListener((changes, namespace) => {
-    namespace === "local" && (changes.MemoryleakFixEnabled && (state.isMemoryFixEnabled = changes.MemoryleakFixEnabled.newValue, state.isMemoryFixEnabled && setupNavigationListener()), (changes.rovalra_avatar_rotator_enabled || changes.rovalra_avatar_rotator_ids || changes.rovalra_avatar_rotator_interval) && updateAvatarRotator());
+    namespace === "local" && (changes.MemoryleakFixEnabled && (state.isMemoryFixEnabled = changes.MemoryleakFixEnabled.newValue, state.isMemoryFixEnabled && setupNavigationListener()), (changes.rovalra_avatar_rotator_enabled || changes.rovalra_avatar_rotator_ids || changes.rovalra_avatar_rotator_interval) && updateAvatarRotator(), changes.privateGameDetectionEnabled && updatePrivateGameListener(), changes.bannedUserDetectionEnabled && updateBannedUserListener(), changes.TotalSpentGamesEnabled && (changes.TotalSpentGamesEnabled.newValue === !1 ? state.transactionInterval && (clearInterval(state.transactionInterval), state.transactionInterval = null) : state.currentUserId && (handleBackgroundTransactionScan(state.currentUserId), state.transactionInterval && clearInterval(state.transactionInterval), state.transactionInterval = setInterval(() => {
+      handleBackgroundTransactionScan(state.currentUserId);
+    }, TRANSACTION_REFRESH_DURATION))));
   });
   chrome.permissions.onAdded.addListener((permissions) => {
-    permissions.permissions?.includes("webNavigation") && setupNavigationListener(), permissions.permissions?.includes("menus") && setupContextMenuListener(), chrome.tabs.query({}, (tabs) => {
+    permissions.permissions?.includes("webNavigation") && setupNavigationListener(), permissions.permissions?.includes("menus") && setupContextMenuListener(), permissions.permissions?.includes("webRequest") && (updateBannedUserListener(), updatePrivateGameListener()), chrome.tabs.query({}, (tabs) => {
       tabs.forEach(
         (tab) => chrome.tabs.sendMessage(tab.id, { action: "permissionsUpdated" }).catch(() => {
         })
@@ -1981,7 +2307,9 @@ Standards{linkEnd}.`,
   chrome.permissions.onRemoved.addListener((permissions) => {
     permissions.permissions?.includes("webNavigation") && chrome.webNavigation.onBeforeNavigate.hasListener(navigationListener) && chrome.webNavigation.onBeforeNavigate.removeListener(
       navigationListener
-    ), permissions.permissions?.includes("menus") && chrome.menus?.onClicked.hasListener(contextMenuClickListener) && chrome.menus.onClicked.removeListener(contextMenuClickListener), chrome.tabs.query({}, (tabs) => {
+    ), permissions.permissions?.includes("menus") && chrome.menus?.onClicked.hasListener(contextMenuClickListener) && chrome.menus.onClicked.removeListener(contextMenuClickListener), permissions.permissions?.includes("webRequest") && chrome.webRequest.onBeforeRedirect.removeListener(
+      onBeforeRedirectHandler
+    ), chrome.tabs.query({}, (tabs) => {
       tabs.forEach(
         (tab) => chrome.tabs.sendMessage(tab.id, { action: "permissionsUpdated" }).catch(() => {
         })
@@ -2029,17 +2357,22 @@ Standards{linkEnd}.`,
           files: [request.path],
           world: "MAIN"
         }), sendResponse({ success: !0 }), !1;
-      case "checkPermission":
-        return chrome.permissions.contains(
-          { permissions: [].concat(request.permission) },
+      case "checkPermission": {
+        let permissions = [].concat(request.permission).map((perm) => perm === "contextMenus" ? "menus" : perm).filter(Boolean);
+        return permissions.includes("menus") ? (sendResponse({ granted: !0 }), !1) : (chrome.permissions.contains(
+          { permissions },
           (granted) => {
             sendResponse({ granted });
           }
-        ), !0;
-      case "requestPermission":
-        return [].concat(request.permission).includes("menus") ? (sendResponse({ granted: !0 }), !1) : ((async () => {
-          let permission = [].concat(request.permission), requestId = "perm_" + Date.now() + "_" + Math.random().toString(36).slice(2), pageUrl = chrome.runtime.getURL(
-            "public/Assets/permission_request.html?permission=" + encodeURIComponent(permission[0]) + "&requestId=" + encodeURIComponent(requestId)
+        ), !0);
+      }
+      case "requestPermission": {
+        let permissions = [].concat(request.permission).map((perm) => perm === "contextMenus" ? "menus" : perm).filter(Boolean), needsPrompt = permissions.filter((perm) => perm !== "menus");
+        if (needsPrompt.length === 0)
+          return sendResponse({ granted: !0 }), !1;
+        return ((async () => {
+          let requestId = "perm_" + Date.now() + "_" + Math.random().toString(36).slice(2), pageUrl = chrome.runtime.getURL(
+            "public/Assets/permission_request.html?permissions=" + encodeURIComponent(JSON.stringify(needsPrompt)) + "&requestId=" + encodeURIComponent(requestId)
           ), resultPromise = new Promise((resolve) => {
             function resultListener(msg, _sender, respond) {
               if (msg.action === "permissionRequestResult" && msg.requestId === requestId)
@@ -2050,15 +2383,17 @@ Standards{linkEnd}.`,
             }, 3e5);
           });
           try {
-            chrome.windows.create({ url: pageUrl, type: "popup", width: 440, height: 300 });
+            chrome.windows.create({ url: pageUrl, type: "popup", width: 480, height: 340 });
           } catch {
             chrome.tabs.create({ url: pageUrl });
           }
           sendResponse({ granted: await resultPromise });
         })(), !0);
-      case "revokePermission":
-        return [].concat(request.permission).includes("menus") ? (sendResponse({ revoked: !1 }), !1) : (chrome.permissions.remove(
-          { permissions: [].concat(request.permission) },
+      }
+      case "revokePermission": {
+        let permissions = [].concat(request.permission).map((perm) => perm === "contextMenus" ? "menus" : perm).filter(Boolean), removablePermissions = permissions.filter((perm) => perm !== "menus");
+        return removablePermissions.length === 0 ? (sendResponse({ revoked: !1 }), !1) : (chrome.permissions.remove(
+          { permissions: removablePermissions },
           (removed) => {
             chrome.runtime.lastError ? sendResponse({
               revoked: !1,
@@ -2066,8 +2401,30 @@ Standards{linkEnd}.`,
             }) : sendResponse({ revoked: removed });
           }
         ), !0);
+      }
       case "updateUserId":
-        return request.userId && request.userId !== state.currentUserId && (state.currentUserId = request.userId, state.latestPresence = null, state.pollingInterval && clearInterval(state.pollingInterval), pollUserPresence(), state.pollingInterval = setInterval(pollUserPresence, 5e3)), !1;
+        return request.userId && request.userId !== state.currentUserId && (state.currentUserId = request.userId, state.latestPresence = null, state.pollingInterval && clearInterval(state.pollingInterval), pollUserPresence(), state.pollingInterval = setInterval(pollUserPresence, 5e3), state.transactionInterval && (clearInterval(state.transactionInterval), state.transactionInterval = null), chrome.storage.local.get(
+          { TotalSpentGamesEnabled: !0 },
+          (settings) => {
+            settings.TotalSpentGamesEnabled && (handleBackgroundTransactionScan(
+              state.currentUserId
+            ), state.transactionInterval = setInterval(() => {
+              handleBackgroundTransactionScan(
+                state.currentUserId
+              );
+            }, TRANSACTION_REFRESH_DURATION));
+          }
+        )), !1;
+      case "triggerTransactionScan":
+        return handleBackgroundTransactionScan(request.userId), !1;
+      case "getBannedUserRedirect": {
+        let userId = state.bannedUserRedirects.get(sender.tab?.id);
+        return state.bannedUserRedirects.delete(sender.tab?.id), sendResponse({ userId }), !1;
+      }
+      case "getPrivateGameRedirect": {
+        let placeId = state.privateGameRedirects.get(sender.tab?.id);
+        return state.privateGameRedirects.delete(sender.tab?.id), sendResponse({ placeId }), !1;
+      }
       case "presencePollResult":
         return !1;
       case "getLatestPresence":
@@ -2127,6 +2484,15 @@ Standards{linkEnd}.`,
             contentType: "application/octet-stream"
           });
         }), !0;
+      case "fetchAssetAsDataUrl":
+        return fetchAssetAsDataUrl(request.url).then((dataUrl) => {
+          sendResponse({ ok: !0, dataUrl });
+        }).catch((err) => {
+          console.error("RoValra: Background asset fetch failed", err), sendResponse({
+            ok: !1,
+            error: err.message
+          });
+        }), !0;
       case "updateContextMenu":
         return chrome.menus && chrome.storage.local.get(
           ["copyIdEnabled", "copyUniverseIdEnabled"],
@@ -2135,12 +2501,18 @@ Standards{linkEnd}.`,
               !chrome.runtime.lastError && request.ids?.length > 0 && request.ids.forEach((item) => {
                 item.type === "Universe" ? settings.copyUniverseIdEnabled && chrome.menus.create({
                   id: `rovalra-copy-universe-${item.id}`,
-                  title: "Copy Universe ID",
-                  contexts: ["link"]
+                  title: item.title,
+                  contexts: ["link"],
+                  documentUrlPatterns: [
+                    "*://*.roblox.com/*"
+                  ]
                 }) : settings.copyIdEnabled && chrome.menus.create({
                   id: `rovalra-copy-${item.id}`,
-                  title: `Copy ${item.type} ID`,
-                  contexts: ["link"]
+                  title: item.title,
+                  contexts: ["link"],
+                  documentUrlPatterns: [
+                    "*://*.roblox.com/*"
+                  ]
                 });
               });
             });
@@ -2155,56 +2527,6 @@ Standards{linkEnd}.`,
   updateUserAgentRule();
   updateAvatarRotator();
   setupContextMenuListener();
-  function luDecompose(A) {
-    let n = A.length, LU = A, P = new Int32Array(n);
-    for (let i = 0; i < n; i++) P[i] = i;
-    for (let k = 0; k < n; k++) {
-      let pivot = k;
-      for (let i = k + 1; i < n; i++)
-        Math.abs(LU[i][k]) > Math.abs(LU[pivot][k]) && (pivot = i);
-      if (pivot !== k) {
-        let tmpRow = LU[k];
-        LU[k] = LU[pivot], LU[pivot] = tmpRow;
-        let tmpP = P[k];
-        P[k] = P[pivot], P[pivot] = tmpP;
-      }
-      let pivotVal = LU[k][k];
-      if (!(Math.abs(pivotVal) < 1e-18))
-        for (let i = k + 1; i < n; i++) {
-          LU[i][k] /= pivotVal;
-          let mult = LU[i][k], rowI = LU[i], rowK = LU[k];
-          for (let j = k + 1; j < n; j++) rowI[j] -= mult * rowK[j];
-        }
-    }
-    return { LU, P };
-  }
-  __name(luDecompose, "luDecompose");
-  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.type === "OFFLOAD_RBF_MATH") {
-      let [_A, _bx, _by, _bz] = request.data, A = _A.map((row) => row instanceof Float32Array ? row : Array.isArray(row) ? new Float32Array(row) : new Float32Array(Object.values(row))), bx = _bx instanceof Float32Array ? _bx : new Float32Array(Object.values(_bx)), by = _by instanceof Float32Array ? _by : new Float32Array(Object.values(_by)), bz = _bz instanceof Float32Array ? _bz : new Float32Array(Object.values(_bz)), { LU, P } = luDecompose(A), n = LU.length, result = new Float32Array(n * 3);
-      for (let i = 0; i < n; i++) {
-        let pIdx = P[i];
-        result[i * 3 + 0] = bx[pIdx], result[i * 3 + 1] = by[pIdx], result[i * 3 + 2] = bz[pIdx];
-      }
-      for (let i = 0; i < n; i++) {
-        let row = LU[i], sumX = result[i * 3 + 0], sumY = result[i * 3 + 1], sumZ = result[i * 3 + 2];
-        for (let j = 0; j < i; j++) {
-          let val = row[j], rj = j * 3;
-          sumX -= val * result[rj + 0], sumY -= val * result[rj + 1], sumZ -= val * result[rj + 2];
-        }
-        result[i * 3 + 0] = sumX, result[i * 3 + 1] = sumY, result[i * 3 + 2] = sumZ;
-      }
-      for (let i = n - 1; i >= 0; i--) {
-        let row = LU[i], sumX = result[i * 3 + 0], sumY = result[i * 3 + 1], sumZ = result[i * 3 + 2];
-        for (let j = i + 1; j < n; j++) {
-          let val = row[j], rj = j * 3;
-          sumX -= val * result[rj + 0], sumY -= val * result[rj + 1], sumZ -= val * result[rj + 2];
-        }
-        let div = row[i];
-        result[i * 3 + 0] = sumX / div, result[i * 3 + 1] = sumY / div, result[i * 3 + 2] = sumZ / div;
-      }
-      sendResponse(result);
-    }
-    return !0;
-  });
+  updateBannedUserListener();
+  updatePrivateGameListener();
 })();

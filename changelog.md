@@ -1,9 +1,22 @@
+\## 2.4.12.4 Firefox 23/04/2026
+
+&#x20; # Fixes :
+
+* Fixed Server region not displaying the correct region name if you used the ascending/descending server sorting
+
+&#x20; # Changes :
+
+* Updated to RoValra 2.4.15
+
+
+
 \## 2.4.12.4 Firefox 9/04/2026
 
 &#x20; # Fixes :
 
-* Fixed some labels not showing correctly.
-* Fixed RoValra not joining the closest server after a bit of searching.
+Fixed some labels not showing correctly.
+
+Fixed RoValra not joining the closest server after a bit of searching.
 
 
 
@@ -19,7 +32,7 @@
 
 
 
-\## 2.4.12.2 Firefox 3/30/2026
+2.4.12.2 Firefox 3/30/2026
 
 &#x20; # Fixes :
 
