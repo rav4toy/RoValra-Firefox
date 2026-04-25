@@ -1,3 +1,13 @@
+\## 2.4.15.2 Firefox 25/04/2026
+
+&#x20; # Changes :
+
+* Updated some more stuff related to RoValra
+
+
+
+
+
 \## 2.4.15.1 Firefox 23/04/2026
 
 &#x20; # Fixes :
