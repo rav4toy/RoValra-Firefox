@@ -3,6 +3,7 @@
 &#x20; # Changes :
 
 * Updated some more stuff related to RoValra
+* Fixed Updates tab showing sometimes as blank
 
 
 
