@@ -1,5 +1,6 @@
 import { observeElement } from '../../core/observer.js';
 import { getPlaceIdFromUrl } from '../../core/idExtractor.js';
+import { getAuthenticatedUserId } from '../../core/user.js';
 
 const applyImpersonateAttribute = (headerContainer) => {
     chrome.storage.local.get('impersonateRobloxStaffSetting', function (data) {
@@ -135,9 +136,7 @@ const applyProfileGameCardFix = () => {
 
     const css = `
         .profile-favorite-experiences .css-1jynqc0-carouselContainer,
-        .profile-favorite-experiences .css-1i465w8-carousel,
-        [class*="collectionCarouselContainer"] [class*="carouselContainer"],
-        [class*="collectionCarouselContainer"] [class*="carousel"] {
+        .profile-favorite-experiences .css-1i465w8-carousel {
             height: 250px !important;
             overflow: visible !important;
         }
@@ -148,7 +147,7 @@ const applyProfileGameCardFix = () => {
 
     import('../../core/ui/games/gameCard.js').then(({ createGameCard }) => {
         observeElement(
-            '[class*="collectionCarouselContainer"] .game-card-container, .profile-favorite-experiences .game-card-container',
+            '.profile-favorite-experiences .game-card-container',
             (originalCard) => {
                 if (originalCard.dataset.fixed) return;
                 originalCard.dataset.fixed = 'true';
@@ -179,6 +178,35 @@ const applyProfileGameCardFix = () => {
     });
 };
 
+// Cuz RoSeal is broken and im the only one having this issue i have to fix it myself 🙄
+const applyFriendsCarouselPaddingFix = async () => {
+    const userId = await getAuthenticatedUserId();
+
+    if (userId !== 447170745) return;
+
+    observeElement(
+        '.react-friends-carousel-container.roseal-friends-carousel-container',
+        () => {
+            const css = `
+            .friends-carousel-container {
+                padding: 0 !important;
+            }
+        `;
+            const style = document.createElement('style');
+            style.setAttribute('data-rovalra-friends-carousel-fix', 'true');
+            style.textContent = css;
+
+            if (
+                !document.querySelector(
+                    'style[data-rovalra-friends-carousel-fix]',
+                )
+            ) {
+                document.head.appendChild(style);
+            }
+        },
+    );
+};
+
 export function init() {
     chrome.storage.local.get(
         ['cssfixesEnabled', 'giantInvisibleLink'],
@@ -193,6 +221,7 @@ export function init() {
                 applyGameTitleFix();
                 applyCartRemoveButtonFix();
                 applyProfileGameCardFix();
+                applyFriendsCarouselPaddingFix();
             }
         },
     );

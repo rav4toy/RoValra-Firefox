@@ -158,6 +158,11 @@
         "tooltip": "This shows if Roblox thinks your account is your first account. <br>This info comes directly from Roblox but may not be accurate.",
         "createdDate": "First account created: {{date}}"
     },
+    "legacyThemeSwitcher": {
+        "label": "Theme",
+        "light": "Light",
+        "dark": "Dark"
+    },
     "previousPrice": {
         "offSale": "Off Sale",
         "text": "Previous Price:"
@@ -222,6 +227,14 @@
         "stipend": "Stipend",
         "errorUserId": "Could not retrieve user ID.",
         "errorRetries": "Failed after multiple retries. Last error: {{error}}"
+    },
+    "totalSpentGames": {
+        "label": "Total Spent",
+        "loading": "Loading...",
+        "failedToLoad": "Failed to load",
+        "singlePurchase": "1 purchase",
+        "multiplePurchases": "{{count}} purchases",
+        "stillCalculating": "Total Spent is still calculating."
     },
     "settings": {
         "tabs": {
@@ -391,7 +404,8 @@
         "blocked": {
             "eighteenPlus": "Update History doesn't work on 18+ experiences",
             "paidAccess": "Update History doesn't work on paid access experiences",
-            "subplace": "Update History doesn't work on subplaces with join restrictions"
+            "subplace": "Update History doesn't work on subplaces with join restrictions",
+            "noDesktopSupport": "Update History isn't supported on experiences without PC support"
         }
     },
     "serverList": {
@@ -544,9 +558,17 @@
         "originSearch": "Search",
         "originInGame": "In Game",
         "originProfile": "Profile",
+        "originQQContacts": "QQ Contacts",
+        "originWeChatContacts": "WeChat Contacts",
         "originQrCode": "QR Code",
+        "originProfileShare": "Profile Share",
+        "originPhoneContacts": "Phone Contacts",
         "originPeopleYouMayKnow": "People You May Know",
+        "originFriendLink": "Friend Link",
         "originUnknown": "Unknown"
+    },
+    "lastPlayed": {
+        "together": "Most Played Together"
     },
     "unfriend": {
         "confirmUnfriend": "Confirm Unfriend",
@@ -620,6 +642,7 @@
             "visits": "Visits",
             "maxPlayers": "Max Players",
             "genre": "Genre",
+            "subgenre": "Subgenre",
             "created": "Created",
             "updated": "Updated",
             "voiceChat": "Voice Chat",
@@ -717,5 +740,16 @@
             "universe": "Universe",
             "user": "User"
         }
+    },
+    "friendsListOverlay": {
+        "title": "Friends playing {{gameName}}",
+        "join": "Join"
+    },
+    "placeVisits": {
+        "label": "{{count}} Place Visits",
+        "tooltip": "Total Community Place Visits"
+    },
+    "groups": {
+        "createdLabel": "Created"
     }
 }

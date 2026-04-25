@@ -16,6 +16,7 @@ import { init as initApiDocs } from './features/developer/apiDocs.js';
 import { init as initApiKey } from './core/utils/trackers/apiKey.js';
 import { init as initServerTracker } from './core/utils/trackers/servers.js';
 import { initFriendsListTracking } from './core/utils/trackers/friendslist.js';
+import { initTransactionsTracking } from './core/utils/trackers/transactions.js';
 import { init as initPrivateGames } from './features/games/privateGames.js';
 import { init as initQoLToggles } from './features/navigation/QoLToggles.js';
 import { init as initCopyId } from './features/sitewide/copyid.js';
@@ -55,6 +56,8 @@ import { init as bannertest } from './features/games/banner.js';
 import { init as quickOutfits } from './features/games/actions/quickOutfits.js';
 import { init as initDevProductLoader } from './features/games/tab/DevProducts.js';
 import { init as initHeatmap } from './features/games/tab/updateHistory.js';
+import { init as initTotalSpentGames } from './features/games/tab/totalSpentGames.js';
+import { init as initEvents } from './features/games/about/events.js';
 // transactions
 import { init as initTotalSpent } from './features/transactions/totalspent.js';
 import { init as initPendingRobuxTrans } from './features/transactions/pendingRobuxTrans.js';
@@ -71,6 +74,8 @@ import { init as initHiddenGroupGames } from './features/groups/hiddenGroupGames
 import { init as initAntiBots } from './features/groups/Antibots.js';
 import { init as initPendingRobux } from './features/groups/pendingRobux.js';
 import { init as initDraggableGroups } from './features/groups/draggableGroups.js';
+import { init as initPlaceVisits } from './features/groups/placevisits.js';
+import { init as initGroupCreateDate } from './features/groups/createDate.js';
 // Profile
 import { init as initDonationLink } from './features/profile/header/donationlink.js';
 import { init as initRap } from './features/profile/header/rap.js';
@@ -79,6 +84,7 @@ import { init as initOutfits } from './features/profile/outfits.js';
 import { init as initPrivateServers } from './features/profile/privateserver.js';
 import { init as initRovalraBadges } from './features/profile/header/RoValraBadges.js';
 import { init as initUserGames } from './features/profile/hiddengames.js';
+import { init as initGroupRole } from './features/profile/grouprole.js';
 import { init as initPrivateServerControls } from './features/games/privateserver.js';
 import { init as initPreviousPrice } from './features/sitewide/PreviousPrice.js';
 import { init as initCategorizeWearing } from './features/profile/categorizeWearing.js';
@@ -86,13 +92,17 @@ import { init as initBannedUsers } from './features/profile/bannedusers.js';
 import { init as initTrustedFriends } from './features/profile/trustedfriends.js';
 import { init as initProfileRender } from './features/profile/header/ProfileRender.js';
 import { init as initStatus } from './features/profile/header/status.js';
+import { init as initLastPlayed } from './features/profile/header/lastplayed.js';
 import { init as initFriendsSince } from './features/profile/friends/friendsSince.js';
 import { init as initUnfriend } from './features/profile/friends/unfriend.js';
+import { init as initProfileBackground } from './features/profile/header/profileBackground.js';
 import { init as initRobuxIcons } from './core/ui/robuxIcon.js';
+import { init as initPurchasePromptItemId } from './core/catalog/purchasePromptItemId.js';
 
 // Settings
 import { init as initSettingsPage } from './features/settings/index.js';
 import { init as initFirstAccount } from './features/settings/roblox/firstAccount.js';
+import { init as initLegacyThemeSwitcher } from './features/settings/roblox/legacyThemeSwitcher.js';
 // create
 import { init as initCreateDownload } from './features/create.roblox.com/download.js';
 
@@ -119,6 +129,7 @@ const featureRoutes = [
             initApiKey,
             initServerTracker,
             initFriendsListTracking,
+            initTransactionsTracking,
             initQoLToggles,
             initCopyId,
             initBetaPrograms,
@@ -132,6 +143,8 @@ const featureRoutes = [
             initStatus,
             initCustomFont,
             initRobuxIcons,
+            initProfileBackground,
+            initPurchasePromptItemId,
         ],
     },
     // pretty much just the 40% method
@@ -159,6 +172,8 @@ const featureRoutes = [
             initAntiBots,
             initPendingRobux,
             initDraggableGroups,
+            initPlaceVisits,
+            initGroupCreateDate,
         ],
     },
     // Game pages
@@ -181,7 +196,12 @@ const featureRoutes = [
     // private games and game pages
     {
         paths: ['/games/', '/private-games'],
-        features: [initDevProductLoader, initSubplaces],
+        features: [
+            initDevProductLoader,
+            initSubplaces,
+            initTotalSpentGames,
+            initEvents,
+        ],
     },
     // Private games page
     {
@@ -212,6 +232,8 @@ const featureRoutes = [
             initProfileRender,
             initFriendsSince,
             initUnfriend,
+            initLastPlayed,
+            initGroupRole,
         ],
     },
     {
@@ -249,7 +271,7 @@ const featureRoutes = [
     },
     {
         paths: ['/my/account'],
-        features: [initFirstAccount],
+        features: [initFirstAccount, initLegacyThemeSwitcher],
     },
 ];
 
