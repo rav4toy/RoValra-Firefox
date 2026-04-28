@@ -214,16 +214,18 @@ export function initRecentServers() {
             let section = container.querySelector(
                 '#rbx-recent-running-games-rovalra',
             );
+            let separator = container.querySelector(
+                '.rovalra-modern-separator',
+            );
+
             if (section) {
                 const isSectionModern =
                     section.classList.contains('rovalra-modern-ui');
                 if (isModern !== isSectionModern) {
                     section.remove();
                     section = null;
-                    const separator = container.querySelector(
-                        '.rovalra-modern-separator',
-                    );
                     if (separator) separator.remove();
+                    separator = null;
                 }
             }
 
@@ -270,23 +272,6 @@ export function initRecentServers() {
                     grid.className = 'flex flex-col rbx-recent-servers-grid';
 
                     section.append(headerWrapper, grid);
-
-                    const separator = document.createElement('div');
-                    separator.className =
-                        'margin-y-large rovalra-modern-separator';
-                    separator.innerHTML =
-                        '<div role="separator" data-orientation="horizontal" aria-orientation="horizontal" class="stroke-default self-stretch" style="border-right-width: 0px; border-bottom-width: 0px; box-sizing: border-box; border-style: solid; height: 0px; border-top-width: var(--stroke-standard); border-left-width: 0px;"></div>';
-
-                    const modernSections = container.querySelectorAll(
-                        '.flex.flex-col.gap-large.width-full',
-                    );
-                    if (modernSections.length >= 2) {
-                        modernSections[1].before(section);
-                        section.after(separator);
-                    } else {
-                        container.appendChild(section);
-                        container.appendChild(separator);
-                    }
                 } else {
                     section.className = 'server-list-section';
                     const content = `
@@ -304,28 +289,55 @@ export function initRecentServers() {
                     `;
                     section.innerHTML = DOMPurify.sanitize(content);
 
-                    const friendsSection = container.querySelector(
-                        '#rbx-friends-running-games',
-                    );
-                    const publicSection = container.querySelector(
-                        '#rbx-public-running-games',
-                    );
-                    if (friendsSection) {
-                        friendsSection.before(section);
-                    } else if (publicSection) {
-                        publicSection.before(section);
-                    } else {
-                        container.appendChild(section);
-                    }
-                }
-
-                if (!isModern) {
                     const refreshButton = section.querySelector('.rbx-refresh');
                     if (refreshButton) {
                         refreshButton.addEventListener('click', () =>
                             renderRecentServers(section),
                         );
                     }
+                }
+            }
+
+            if (isModern) {
+                if (!separator) {
+                    separator = document.createElement('div');
+                    separator.className =
+                        'margin-y-large rovalra-modern-separator';
+                    separator.innerHTML =
+                        '<div role="separator" data-orientation="horizontal" aria-orientation="horizontal" class="stroke-default self-stretch" style="border-right-width: 0px; border-bottom-width: 0px; box-sizing: border-box; border-style: solid; height: 0px; border-top-width: var(--stroke-standard); border-left-width: 0px;"></div>';
+                }
+
+                const modernSections = Array.from(
+                    container.querySelectorAll(
+                        '.flex.flex-col.gap-large.width-full',
+                    ),
+                ).filter((s) => s !== section);
+
+                if (modernSections.length >= 2) {
+                    modernSections[1].before(section);
+                    section.after(separator);
+                } else if (modernSections.length === 1) {
+                    modernSections[0].before(section);
+                    section.after(separator);
+                } else {
+                    if (section.parentElement !== container)
+                        container.appendChild(section);
+                    if (separator.parentElement !== container)
+                        container.appendChild(separator);
+                }
+            } else {
+                const friendsSection = container.querySelector(
+                    '#rbx-friends-running-games',
+                );
+                const publicSection = container.querySelector(
+                    '#rbx-public-running-games',
+                );
+                if (friendsSection) {
+                    friendsSection.before(section);
+                } else if (publicSection) {
+                    publicSection.before(section);
+                } else if (section.parentElement !== container) {
+                    container.appendChild(section);
                 }
             }
 

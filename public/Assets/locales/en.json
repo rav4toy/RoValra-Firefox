@@ -365,8 +365,8 @@
         "privateServers": "Private Servers"
     },
     "privateServerPage": {
-        "regenerateLink": "Regenerate Link",
-        "regenerated": "Regenerated!"
+        "regenerateLink": "Generate Link",
+        "regenerated": "Generated!"
     },
     "devProducts": {
         "noProducts": "No developer products found.",
