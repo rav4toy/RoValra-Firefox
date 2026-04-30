@@ -1,6 +1,11 @@
-import { observeElement } from '../observer.js';
+import {
+    observeElement,
+    observeChildren,
+    observeAttributes,
+} from '../observer.js';
 import { callRobloxApiJson } from '../api.js';
 import { cleanPrice } from '../utils/priceCleaner.js';
+import { addTooltip } from './tooltip.js';
 import {
     convertCurrencyAmount,
     DEVEX_USD_RATE,
@@ -22,10 +27,11 @@ const VALUE_TEXT_SELECTOR =
     '.text-robux, .text-robux-tile, .text-robux-lg, .robux-line-value, #rovalra-stat-robux, #nav-robux-amount, .rovalra-stat-value';
 const USD_TARGET_ICON_SELECTOR =
     '.icon-robux-16x16, .icon-robux-28x28, .icon-robux-gray-16x16, .icon-robux-tile, .rovalra-robux-icon';
-const USD_TARGET_VALUE_SELECTOR =
-    `${VALUE_TEXT_SELECTOR}, .item-card-price, .store-card-price, .subscription-card-price, .icon-robux-container, .amount.icon-robux-container, .amount-cell, #navbar-robux .nav-robux-icon, #rbx-game-passes .store-card-price, #roseal-game-passes .store-card-price, .gear-passes-container .store-card-price, .game-dev-store .store-card-price`;
+const USD_TARGET_VALUE_SELECTOR = `${VALUE_TEXT_SELECTOR}, .item-card-price, .store-card-price, .subscription-card-price, .icon-robux-container, .amount.icon-robux-container, .amount-cell, #navbar-robux .nav-robux-icon, #rbx-game-passes .store-card-price, #roseal-game-passes .store-card-price, .gear-passes-container .store-card-price, .game-dev-store .store-card-price`;
 const IGNORE_USD_SELECTOR =
-    '.rovalra-usd-estimate, .tooltip, .modal-dialog, #rovalra-stat-transactions, #rovalra-premium-breakdown-container';
+    '.rovalra-usd-estimate, .tooltip, .modal-dialog, #rovalra-stat-transactions, #rovalra-premium-breakdown-container, .rovalra-trade-summary, .rovalra-total-value-line, .rovalra-total-demand-line, .rovalra-value-label';
+
+const INLINE_FIAT_LOCATIONS = '#navbar-robux, #buy-robux-popover';
 
 let robuxPricingPromise = null;
 
@@ -39,11 +45,9 @@ function removeAllEstimates() {
     document
         .querySelectorAll('.rovalra-usd-estimate')
         .forEach((el) => el.remove());
-    document
-        .querySelectorAll('[data-rovalra-usd-amount]')
-        .forEach((el) => {
-            delete el.dataset.rovalraUsdAmount;
-        });
+    document.querySelectorAll('[data-rovalra-usd-amount]').forEach((el) => {
+        delete el.dataset.rovalraUsdAmount;
+    });
 }
 
 function isTransactionsPage() {
@@ -67,7 +71,9 @@ function isTransactionsSummaryElement(element) {
 function isGroupRevenueSummaryElement(element) {
     return (
         element instanceof HTMLElement &&
-        element.closest('#configure-group-web-app revenue-summary table.section-content') !== null
+        element.closest(
+            '#configure-group-web-app revenue-summary table.section-content',
+        ) !== null
     );
 }
 
@@ -97,10 +103,9 @@ async function getRobuxPricingData() {
                     robuxAmount,
                     price: {
                         amount: priceAmount,
-                        currency:
-                            product?.price?.currency || {
-                                currencyCode: 'USD',
-                            },
+                        currency: product?.price?.currency || {
+                            currencyCode: 'USD',
+                        },
                     },
                     premiumFeatureTypeName:
                         product?.premiumFeatureTypeName || '',
@@ -120,10 +125,9 @@ async function getRobuxPricingData() {
                 robuxAmount: 80,
                 price: {
                     amount: 0.99,
-                    currency:
-                        products[0]?.price?.currency || {
-                            currencyCode: 'USD',
-                        },
+                    currency: products[0]?.price?.currency || {
+                        currencyCode: 'USD',
+                    },
                 },
             });
         }
@@ -148,7 +152,9 @@ function estimateUsdValue(robuxAmount, pricingData) {
         return null;
     }
 
-    const exact = products.find((product) => product.robuxAmount === robuxAmount);
+    const exact = products.find(
+        (product) => product.robuxAmount === robuxAmount,
+    );
     if (exact) return exact.price.amount;
 
     const lower = [...products]
@@ -160,7 +166,10 @@ function estimateUsdValue(robuxAmount, pricingData) {
         const range = upper.robuxAmount - lower.robuxAmount;
         if (range > 0) {
             const progress = (robuxAmount - lower.robuxAmount) / range;
-            return lower.price.amount + (upper.price.amount - lower.price.amount) * progress;
+            return (
+                lower.price.amount +
+                (upper.price.amount - lower.price.amount) * progress
+            );
         }
     }
 
@@ -209,20 +218,18 @@ function getEstimateAnchor(element) {
             'td.icon-robux-container, td.amount.icon-robux-container, td.amount.amount-cell, td.icon-robux-container.amount-cell, .icon-robux-container',
         )
     ) {
-        const numericChild = [...element.children]
-            .reverse()
-            .find((child) => {
-                if (!(child instanceof HTMLElement)) return false;
-                if (
-                    child.matches(
-                        '.rovalra-usd-estimate, .icon-robux-16x16, .icon-robux-28x28, .icon-robux-gray-16x16, .icon-robux-tile, .rovalra-robux-icon',
-                    )
-                ) {
-                    return false;
-                }
+        const numericChild = [...element.children].reverse().find((child) => {
+            if (!(child instanceof HTMLElement)) return false;
+            if (
+                child.matches(
+                    '.rovalra-usd-estimate, .icon-robux-16x16, .icon-robux-28x28, .icon-robux-gray-16x16, .icon-robux-tile, .rovalra-robux-icon',
+                )
+            ) {
+                return false;
+            }
 
-                return getRobuxAmountFromElement(child) > 0;
-            });
+            return getRobuxAmountFromElement(child) > 0;
+        });
 
         if (numericChild instanceof HTMLElement) return numericChild;
     }
@@ -239,7 +246,11 @@ function getEstimateAnchor(element) {
     );
     const textOnlyChildren = childElements.filter((child) => {
         if (!(child instanceof HTMLElement)) return false;
-        if (child.matches('.rovalra-usd-estimate, .icon-robux-16x16, .icon-robux-28x28, .icon-robux-gray-16x16, .icon-robux-tile, .rovalra-robux-icon')) {
+        if (
+            child.matches(
+                '.rovalra-usd-estimate, .icon-robux-16x16, .icon-robux-28x28, .icon-robux-gray-16x16, .icon-robux-tile, .rovalra-robux-icon',
+            )
+        ) {
             return false;
         }
         return getRobuxAmountFromElement(child) > 0;
@@ -260,14 +271,8 @@ function isValidEstimateContainer(element) {
 
 function buildEstimateStyle(fiatSettings) {
     return {
-        styleMode:
-            fiatSettings.robuxFiatEstimateStyleMode ===
-            ROBUX_FIAT_ESTIMATE_STYLE_MODE_GRADIENT
-                ? ROBUX_FIAT_ESTIMATE_STYLE_MODE_GRADIENT
-                : 'solid',
-        color:
-            fiatSettings.robuxFiatEstimateColor ||
-            ROBUX_FIAT_ESTIMATE_DEFAULT_COLOR,
+        styleMode: ROBUX_FIAT_ESTIMATE_STYLE_MODE_GRADIENT,
+        color: 'var(--rovalra-secondary-text-color)',
         gradient: {
             ...ROBUX_FIAT_ESTIMATE_DEFAULT_GRADIENT,
             ...(fiatSettings.robuxFiatEstimateGradient || {}),
@@ -365,46 +370,67 @@ function upsertEstimate(anchorElement, estimate, options = {}) {
     if (!text) return null;
     const style = typeof estimate === 'object' ? estimate?.style : null;
 
-    let estimateEl = null;
+    const useInline = anchor.closest(INLINE_FIAT_LOCATIONS) !== null;
 
-    if (appendInside) {
-        estimateEl = Array.from(anchor.children).find(
-            (child) =>
-                child instanceof HTMLElement &&
-                child.classList.contains('rovalra-usd-estimate'),
-        );
-    } else {
-        estimateEl =
-            anchor.nextElementSibling instanceof HTMLElement &&
-            anchor.nextElementSibling.classList.contains('rovalra-usd-estimate')
-                ? anchor.nextElementSibling
-                : null;
-    }
+    if (useInline) {
+        let estimateEl = null;
 
-    if (!estimateEl) {
-        estimateEl = document.createElement('span');
-        estimateEl.className = 'rovalra-usd-estimate';
-        Object.assign(estimateEl.style, {
-            marginLeft: compact ? '2px' : '4px',
-            fontSize: compact ? '0.85em' : '0.9em',
-            whiteSpace: 'nowrap',
-            display: 'inline-block',
-        });
         if (appendInside) {
-            anchor.appendChild(estimateEl);
+            estimateEl = Array.from(anchor.children).find(
+                (child) =>
+                    child instanceof HTMLElement &&
+                    child.classList.contains('rovalra-usd-estimate'),
+            );
         } else {
-            anchor.insertAdjacentElement('afterend', estimateEl);
+            estimateEl =
+                anchor.nextElementSibling instanceof HTMLElement &&
+                anchor.nextElementSibling.classList.contains(
+                    'rovalra-usd-estimate',
+                )
+                    ? anchor.nextElementSibling
+                    : null;
         }
+
+        if (!estimateEl) {
+            estimateEl = document.createElement('span');
+            estimateEl.className = 'rovalra-usd-estimate';
+            Object.assign(estimateEl.style, {
+                marginLeft: compact ? '2px' : '4px',
+                fontSize: '13px',
+                whiteSpace: 'nowrap',
+                display: 'inline-block',
+            });
+            if (appendInside) {
+                anchor.appendChild(estimateEl);
+            } else {
+                anchor.insertAdjacentElement('afterend', estimateEl);
+            }
+        }
+
+        applyEstimateStyle(estimateEl, style);
+
+        const nextText = ` (${text})`;
+        if (estimateEl.textContent !== nextText) {
+            estimateEl.textContent = nextText;
+        }
+
+        return estimateEl;
+    } else {
+        const existingEstimate = anchor.nextElementSibling;
+        if (
+            existingEstimate instanceof HTMLElement &&
+            existingEstimate.classList.contains('rovalra-usd-estimate')
+        ) {
+            existingEstimate.remove();
+        }
+
+        if (!anchor.dataset.rovalraTooltipAttached) {
+            addTooltip(anchor, text, { position: 'top' });
+            anchor.dataset.rovalraTooltipAttached = 'true';
+        }
+
+        return null;
     }
-
-    applyEstimateStyle(estimateEl, style);
-
-    const nextText = ` \u2248 ${text}`;
-    if (estimateEl.textContent !== nextText) {
-        estimateEl.textContent = nextText;
-    }
-
-    return estimateEl;
 }
 
 function getTransactionsLabelAnchor(element) {
@@ -421,7 +447,9 @@ function getTransactionsLabelAnchor(element) {
     const labelCell = cells.find(
         (cell) =>
             !cell.matches('.amount, .amount-cell, .icon-robux-container') &&
-            !cell.querySelector('.icon-robux-16x16, .icon-robux-28x28, .icon-robux-gray-16x16, .icon-robux-tile'),
+            !cell.querySelector(
+                '.icon-robux-16x16, .icon-robux-28x28, .icon-robux-gray-16x16, .icon-robux-tile',
+            ),
     );
 
     if (!(labelCell instanceof HTMLElement)) return null;
@@ -482,8 +510,9 @@ function shouldIgnoreEstimateMutation(mutations) {
             mutation.target.parentElement instanceof HTMLElement
         ) {
             return (
-                mutation.target.parentElement.closest('.rovalra-usd-estimate') !==
-                null
+                mutation.target.parentElement.closest(
+                    '.rovalra-usd-estimate',
+                ) !== null
             );
         }
 
@@ -495,7 +524,9 @@ function shouldIgnoreEstimateMutation(mutations) {
                 node instanceof Text &&
                 node.parentElement instanceof HTMLElement
             ) {
-                return node.parentElement.closest('.rovalra-usd-estimate') !== null;
+                return (
+                    node.parentElement.closest('.rovalra-usd-estimate') !== null
+                );
             }
             return true;
         });
@@ -514,51 +545,6 @@ function processTransactionsTable(summaryRoot) {
             if (!(labelCell instanceof HTMLElement)) return;
             attachTransactionsCellEstimate(labelCell);
         });
-}
-
-function observeTransactionsSummary(summaryRoot) {
-    if (!(summaryRoot instanceof HTMLElement)) return;
-
-    processTransactionsTable(summaryRoot);
-
-    if (summaryRoot.dataset.rovalraUsdObserverAttached === 'true') return;
-
-    let scheduled = false;
-    const observer = new MutationObserver((mutations) => {
-        if (shouldIgnoreEstimateMutation(mutations)) return;
-        if (scheduled) return;
-        scheduled = true;
-
-        queueMicrotask(() => {
-            scheduled = false;
-            processTransactionsTable(summaryRoot);
-        });
-    });
-
-    observer.observe(summaryRoot, {
-        childList: true,
-        subtree: true,
-        characterData: true,
-    });
-
-    summaryRoot.dataset.rovalraUsdObserverAttached = 'true';
-}
-
-function hasMatchingEstimate(amountCell, formattedEstimate) {
-    if (!(amountCell instanceof HTMLElement)) return false;
-    const anchor = getEstimateAnchor(amountCell);
-    if (!(anchor instanceof HTMLElement)) return false;
-
-    const currentEstimate =
-        anchor.nextElementSibling instanceof HTMLElement &&
-        anchor.nextElementSibling.classList.contains('rovalra-usd-estimate')
-            ? anchor.nextElementSibling
-            : anchor.querySelector(':scope > .rovalra-usd-estimate');
-
-    return (
-        currentEstimate instanceof HTMLElement &&
-        currentEstimate.textContent === ` \u2248 ${formattedEstimate}`
-    );
 }
 
 async function attachGroupRevenueEstimate(amountCell) {
@@ -595,34 +581,6 @@ function processGroupRevenue(summaryRoot) {
             if (!(amountCell instanceof HTMLElement)) return;
             attachGroupRevenueEstimate(amountCell);
         });
-}
-
-function observeGroupRevenue(root) {
-    if (!(root instanceof HTMLElement)) return;
-
-    processGroupRevenue(root);
-
-    if (root.dataset.rovalraGroupRevenueObserverAttached === 'true') return;
-
-    let scheduled = false;
-    const observer = new MutationObserver((mutations) => {
-        if (shouldIgnoreEstimateMutation(mutations)) return;
-        if (scheduled) return;
-        scheduled = true;
-
-        queueMicrotask(() => {
-            scheduled = false;
-            processGroupRevenue(root);
-        });
-    });
-
-    observer.observe(root, {
-        childList: true,
-        subtree: true,
-        characterData: true,
-    });
-
-    root.dataset.rovalraGroupRevenueObserverAttached = 'true';
 }
 
 function findAmountElementForIcon(icon) {
@@ -675,7 +633,10 @@ function findAmountElementForValueNode(element) {
 async function attachUsdEstimate(icon) {
     if (!(icon instanceof HTMLElement)) return;
     if (icon.closest(IGNORE_USD_SELECTOR)) return;
-    if (isTransactionsSummaryElement(icon) || isGroupRevenueSummaryElement(icon)) {
+    if (
+        isTransactionsSummaryElement(icon) ||
+        isGroupRevenueSummaryElement(icon)
+    ) {
         return;
     }
 
@@ -899,13 +860,31 @@ export function init() {
         { multiple: true },
     );
 
-    observeElement('#transactions-web-app .summary', observeTransactionsSummary, {
-        multiple: true,
-    });
+    observeElement(
+        '#transactions-web-app .summary',
+        (element) => {
+            processTransactionsTable(element);
+            observeChildren(element, () => processTransactionsTable(element));
+            observeAttributes(
+                element,
+                () => processTransactionsTable(element),
+                ['class'],
+            );
+        },
+        { multiple: true },
+    );
 
-    observeElement('#configure-group-web-app', observeGroupRevenue, {
-        multiple: true,
-    });
+    observeElement(
+        '#configure-group-web-app',
+        (element) => {
+            processGroupRevenue(element);
+            observeChildren(element, () => processGroupRevenue(element));
+            observeAttributes(element, () => processGroupRevenue(element), [
+                'class',
+            ]);
+        },
+        { multiple: true },
+    );
 
     scheduleUsdRefresh(0);
     scheduleUsdRefresh(500);
