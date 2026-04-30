@@ -134,12 +134,14 @@ export function init() {
                             assetId = cached.assetId;
                         } else {
                             const link = card.querySelector(
-                                'a[href*="/catalog/"]',
+                                'a[href*="/catalog/"], a[href*="/bundles/"]',
                             );
                             if (link) assetId = getPlaceIdFromUrl(link.href);
                         }
                     } else {
-                        const link = card.querySelector('a[href*="/catalog/"]');
+                        const link = card.querySelector(
+                            'a[href*="/catalog/"], a[href*="/bundles/"]',
+                        );
                         if (!link) return;
                         assetId = getPlaceIdFromUrl(link.href);
                     }
