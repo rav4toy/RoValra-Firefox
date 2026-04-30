@@ -284,6 +284,7 @@ export const PROFILE_ACTIONS = {
     EDIT_APPEARANCE: 'EditAppearance',
     SWITCH_AVATAR: 'SwitchAvatar',
     EDIT_EMOTES: 'EditEmotes',
+    UNLOCK_CHAT: 'UnlockChat',
 };
 
 export default {
