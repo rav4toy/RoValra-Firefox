@@ -83,9 +83,6 @@ async function loadAndRenderProducts(storeTab, placeId) {
     let headerContainer = gamePassesContainer
         ? gamePassesContainer.querySelector('.container-header')
         : null;
-    let noPassesMessage = gamePassesContainer
-        ? gamePassesContainer.querySelector('.section-content-off')
-        : null;
 
     if (!gamePassesContainer) {
         gamePassesContainer = document.createElement('div');
@@ -403,15 +400,47 @@ async function loadAndRenderProducts(storeTab, placeId) {
         }
     };
 
+    let isPassesTabActive = true;
+
+    const getPassesEmptyMessages = () =>
+        Array.from(
+            storeTab.querySelectorAll(
+                '#store-does-not-sell, .section-content-off',
+            ),
+        ).filter((element) => !devProductsList.contains(element));
+
+    const setPassesEmptyMessagesVisible = (visible) => {
+        const shouldShow = visible && passesList.children.length === 0;
+
+        getPassesEmptyMessages().forEach((message) => {
+            message.style.display = shouldShow ? '' : 'none';
+            message.hidden = !shouldShow;
+        });
+    };
+
+    const passesEmptyMessageObserver = new MutationObserver(() => {
+        if (!isPassesTabActive) {
+            setPassesEmptyMessagesVisible(false);
+        }
+    });
+
+    passesEmptyMessageObserver.observe(storeTab, {
+        childList: true,
+        subtree: true,
+    });
+
     const updateTabState = (isPasses) => {
+        isPassesTabActive = isPasses;
+
         const currentRosealFilters = gamePassesContainer.querySelector(
             '.store-item-filters',
         );
 
+        setPassesEmptyMessagesVisible(isPasses);
+
         if (isPasses) {
             passesList.style.display = '';
             if (currentRosealFilters) currentRosealFilters.style.display = '';
-            if (noPassesMessage) noPassesMessage.style.display = '';
             devProductsList.style.display = 'none';
             paginationContainer.style.display = 'none';
             filterWrapper.style.display = 'none';
@@ -419,7 +448,6 @@ async function loadAndRenderProducts(storeTab, placeId) {
             passesList.style.display = 'none';
             if (currentRosealFilters)
                 currentRosealFilters.style.display = 'none';
-            if (noPassesMessage) noPassesMessage.style.display = 'none';
             devProductsList.style.display = '';
 
             if (isProductsLoaded && products.length > 0) {
@@ -428,7 +456,9 @@ async function loadAndRenderProducts(storeTab, placeId) {
             } else {
                 paginationContainer.style.display = 'none';
                 filterWrapper.style.display = 'none';
-                ensureProductsLoaded();
+                ensureProductsLoaded().finally(() =>
+                    setPassesEmptyMessagesVisible(false),
+                );
             }
         }
     };
