@@ -22,17 +22,6 @@ export const SETTINGS_CONFIG = {
                 type: 'checkbox',
                 default: false,
             },
-            hiddenCatalogEnabled: {
-                label: 'Hidden Catalog',
-                description: [
-                    'Shows Roblox made items before they are on the official marketplace.',
-                ],
-                deprecated: 'Patched by Roblox',
-                locked: 'This feature has been patched by Roblox and is no longer functional.',
-                isPermanent: true,
-                type: 'checkbox',
-                default: false,
-            },
             SaveLotsRobuxEnabled: {
                 label: 'Save 10%-40% Robux on Purchases',
                 description: [

@@ -313,7 +313,16 @@ export function initRecentServers() {
                     ),
                 ).filter((s) => s !== section);
 
-                if (modernSections.length >= 2) {
+                const isPrivateUnsupported =
+                    modernSections.length > 0 &&
+                    !!modernSections[0].querySelector(
+                        'a[href*="/info/vip-server"]',
+                    );
+
+                if (isPrivateUnsupported && modernSections.length === 1) {
+                    modernSections[0].after(separator);
+                    separator.after(section);
+                } else if (modernSections.length >= 2) {
                     modernSections[1].before(section);
                     section.after(separator);
                 } else if (modernSections.length === 1) {

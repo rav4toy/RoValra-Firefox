@@ -1,11 +1,11 @@
 import { initializeObserver, startObserving } from './core/observer.js';
 import { detectTheme, dispatchThemeEvent } from './core/theme.js';
+import { getValidAccessToken } from './core/oauth/oauth.js';
 // Site wide
 import { init as initOnboarding } from './features/onboarding/onboarding.js';
 import { init as initWhatAmIJoining } from './features/games/revertlogo.js';
 import { init as initEasterEggLinks } from './features/sitewide/easterEggs/links.js';
 import { init as initCssFixes } from './features/sitewide/cssfixes.js';
-import { init as initHiddenCatalog } from './features/catalog/hiddenCatalog.js';
 import { init as initServerListener } from './features/games/serverlistener.js';
 import { init as initBetaPrograms } from './features/navigation/betaprograms.js';
 import { init as initVideoTest } from './features/developer/videotest.js';
@@ -121,7 +121,6 @@ const featureRoutes = [
             initEasterEggLinks,
             initCssFixes,
             initWhatAmIJoining,
-            initHiddenCatalog,
             initServerListener,
             initOnboarding,
             initVideoTest,
@@ -315,6 +314,18 @@ async function initializePage() {
 
     initializeObserver();
     const observerStatus = startObserving();
+
+    try {
+        await getValidAccessToken(false, false);
+    } catch (error) {
+        console.error('RoValra: OAuth token initialization failed', error);
+    }
+
+    try {
+        await initApiKey();
+    } catch (error) {
+        console.error('RoValra: API key initialization failed', error);
+    }
 
     const onDomReady = async () => {
         detectTheme().then((theme) => dispatchThemeEvent(theme));

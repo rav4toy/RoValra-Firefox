@@ -23,7 +23,6 @@ import {
     displayPrivateServerStatus,
     displayInactivePlaceStatus,
     isExcludedButton,
-    createUUID,
     getFullLocationName,
     fetchAndDisplayRegion,
     addCopyJoinLinkButton,
@@ -32,6 +31,7 @@ import {
     getOrCreateDetailsContainer,
     createInfoElement,
 } from '../../../core/games/servers/serverdetails.js';
+import { createUUID } from '../../../core/apis/serverApi.js';
 import { addModernPrivateServerControls } from '../privateserver.js';
 
 const SHARED_STYLES = `
