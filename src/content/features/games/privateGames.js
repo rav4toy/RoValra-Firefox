@@ -356,7 +356,9 @@ async function loadAndRenderPrivateGame(placeId, settings) {
         })
             .then((favRes) => {
                 gameData.isFavoritedByUser = favRes?.isFavorited || false;
-                updateFavoriteUI(gameData.isFavoritedByUser);
+                if (window.updateFavoriteUI) {
+                    window.updateFavoriteUI(gameData.isFavoritedByUser);
+                }
             })
             .catch((e) => {
                 console.warn('RoValra: Failed to fetch favorites status');
