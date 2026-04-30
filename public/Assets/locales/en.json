@@ -429,7 +429,8 @@
         "secondsAgo": "{{count}}s ago",
         "minutesAgo": "{{count}}m ago",
         "hoursAgo": "{{count}}h ago",
-        "daysAgo": "{{count}}d ago"
+        "daysAgo": "{{count}}d ago",
+        "description": "Recent Servers you were just in."
     },
     "quickOutfits": {
         "errorFetching": "Error fetching outfits",
