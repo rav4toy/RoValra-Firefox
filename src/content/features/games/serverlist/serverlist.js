@@ -673,6 +673,13 @@ function startController() {
 
             if (section.dataset.rovalraSectionType === 'public') {
                 if (
+                    document.getElementById(
+                        'rbx-public-game-server-item-container',
+                    )
+                )
+                    return;
+
+                if (
                     header &&
                     h3 &&
                     !header.querySelector('#rovalra-main-controls')
@@ -976,7 +983,9 @@ try {
 
 export async function createServerCardFromRobloxApi(server, placeId) {
     try {
-        const isModern = !!document.querySelector('.rovalra-modern-ui');
+        const isModern =
+            !document.getElementById('rbx-public-game-server-item-container') &&
+            !!document.querySelector('.rovalra-modern-ui');
         if (isModern) return createModernServerCard(server, placeId);
 
         const listItemClass =
@@ -1054,7 +1063,9 @@ export async function createServerCardFromRobloxApi(server, placeId) {
 
 export async function createServerCardFromApi(server, placeId = '') {
     try {
-        const isModern = !!document.querySelector('.rovalra-modern-ui');
+        const isModern =
+            !document.getElementById('rbx-public-game-server-item-container') &&
+            !!document.querySelector('.rovalra-modern-ui');
         if (isModern) return createModernServerCard(server, placeId);
 
         const listItemClass =
