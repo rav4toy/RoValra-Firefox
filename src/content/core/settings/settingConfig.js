@@ -561,6 +561,8 @@ export const SETTINGS_CONFIG = {
                 ],
                 type: 'checkbox',
                 default: true,
+                deprecated:
+                    'Roblox is working on an A/B test which does this exact thing. This feature will be disabled when it releases.',
             },
             currencyTransferEnabled: {
                 label: 'Currency Transfer',
@@ -1276,6 +1278,14 @@ export const SETTINGS_CONFIG = {
                 requiredPermissions: ['contextMenus'],
             },
 
+            modernIconsEnabled: {
+                label: 'Modern Icons',
+                description: [
+                    'Replaces default Roblox playing and like icons on the site, with the new modern icons used by the client.',
+                ],
+                type: 'checkbox',
+                default: true,
+            },
             cssfixesEnabled: {
                 label: 'Site Fixes',
                 description: [

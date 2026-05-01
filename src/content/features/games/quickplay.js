@@ -778,9 +778,7 @@ async function setupHoverCard(gameLink, settings) {
 
     if (!isSpecialLayout) {
         gameLink
-            .querySelectorAll(
-                '.game-card-info:has(.icon-votes-gray), .game-card-info:has(.icon-playing-counts-gray), .game-card-friend-info',
-            )
+            .querySelectorAll('.game-card-info, .game-card-friend-info')
             .forEach((el) => el.classList.add('quick-play-original-stats'));
     }
 
