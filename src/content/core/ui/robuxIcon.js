@@ -188,6 +188,17 @@ function getEstimateFreeText(element) {
         .querySelectorAll('.rovalra-usd-estimate')
         .forEach((estimateNode) => estimateNode.remove());
 
+    clone.querySelectorAll('span').forEach((span) => {
+        const text = span.textContent.trim();
+        if (
+            text.startsWith('(') &&
+            text.endsWith(')') &&
+            (text.includes('$') || /\d[,.]\d+/.test(text))
+        ) {
+            span.remove();
+        }
+    });
+
     return clone.textContent || '';
 }
 
@@ -364,13 +375,17 @@ function upsertEstimate(anchorElement, estimate, options = {}) {
     const anchor = getEstimateAnchor(anchorElement);
     if (!(anchor instanceof HTMLElement)) return null;
     const compact = options.compact === true;
-    const appendInside = options.appendInside === true;
+
+    const useInline =
+        anchor.closest(INLINE_FIAT_LOCATIONS) !== null ||
+        isTransactionsPage() ||
+        isGroupRevenuePage();
+
+    const appendInside = options.appendInside ?? useInline;
 
     const text = typeof estimate === 'string' ? estimate : estimate?.text;
     if (!text) return null;
     const style = typeof estimate === 'object' ? estimate?.style : null;
-
-    const useInline = anchor.closest(INLINE_FIAT_LOCATIONS) !== null;
 
     if (useInline) {
         let estimateEl = null;
@@ -560,7 +575,7 @@ async function attachGroupRevenueEstimate(amountCell) {
             amount,
             pricingData,
         );
-        if (hasMatchingEstimate(amountCell, formattedEstimate)) return;
+        if (!formattedEstimate) return;
 
         upsertEstimate(amountCell, formattedEstimate, { compact: true });
         amountCell.dataset.rovalraUsdAmount = String(amount);
@@ -797,8 +812,6 @@ export function init() {
         if (areaName !== 'local') return;
 
         const styleKeys = [
-            'robuxFiatEstimateColor',
-            'robuxFiatEstimateStyleMode',
             'robuxFiatEstimateGradient',
             'robuxFiatEstimateBold',
             'robuxFiatEstimateItalic',
