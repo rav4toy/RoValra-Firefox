@@ -33,12 +33,17 @@ async function saveToCache(cacheKey, settings) {
 }
 
 async function fetchAndProcessSettings(userId, options = {}) {
-    try {
-        const authenticatedUserId = await getAuthenticatedUserId();
-        const isOwnProfile =
-            authenticatedUserId &&
-            String(authenticatedUserId) === String(userId);
+    const authenticatedUserId = await getAuthenticatedUserId();
+    const isOwnProfile =
+        authenticatedUserId && String(authenticatedUserId) === String(userId);
 
+    if (isOwnProfile) {
+        await syncDonatorTier();
+    }
+
+    let apiSettings = {};
+    let apiProvidedMeaningfulSettings = false;
+    try {
         const data = await callRobloxApiJson({
             isRovalraApi: true,
             subdomain: 'apis',
@@ -48,13 +53,43 @@ async function fetchAndProcessSettings(userId, options = {}) {
         });
 
         if (data.status === 'success' && data.settings) {
-            return await processApiSettings(userId, data.settings, options);
+            apiSettings = data.settings;
+
+            if (
+                (apiSettings.environment === 0 ||
+                    apiSettings.environment === 1) &&
+                apiSettings.status === '' &&
+                Object.keys(apiSettings).length === 2
+            ) {
+                apiProvidedMeaningfulSettings = false;
+            } else {
+                apiProvidedMeaningfulSettings = true;
+            }
         }
     } catch (error) {
         console.warn('RoValra: Failed to fetch settings from API.', error);
+        apiProvidedMeaningfulSettings = false;
     }
 
-    return await processApiSettings(userId, null, options);
+    let finalStatus = null;
+    let finalEnvironment = 1;
+    let finalGradient = null;
+
+    if (apiProvidedMeaningfulSettings) {
+        finalStatus = apiSettings.status;
+        finalEnvironment = apiSettings.environment;
+        finalGradient = apiSettings.gradient;
+    }
+
+    return {
+        status: finalStatus,
+        environment: finalEnvironment || 1,
+        gradient: finalGradient,
+        canUseApi: apiProvidedMeaningfulSettings,
+        anonymous_leaderboard:
+            apiSettings.anonymous_leaderboard === 'true' ||
+            apiSettings.anonymous_leaderboard === true,
+    };
 }
 
 async function processBatchQueue() {
@@ -125,13 +160,13 @@ async function processBatchQueue() {
         for (const batchItem of currentBatch) {
             const cacheKey = String(batchItem.userId);
             if (!processedKeys.has(cacheKey)) {
-                const settings = await processApiSettings(
+                const settings = await fetchAndProcessSettings(
                     batchItem.userId,
-                    null,
                     batchItem.options,
                 );
 
                 await saveToCache(cacheKey, settings);
+                processedKeys.add(cacheKey);
 
                 const resolvers = pendingResolvers.get(cacheKey);
                 if (resolvers) {
@@ -148,17 +183,23 @@ async function processBatchQueue() {
 
         for (const batchItem of currentBatch) {
             const cacheKey = String(batchItem.userId);
-            const settings = await processApiSettings(
-                batchItem.userId,
-                null,
-                batchItem.options,
-            );
-            await saveToCache(cacheKey, settings);
+            try {
+                const settings = await fetchAndProcessSettings(
+                    batchItem.userId,
+                    batchItem.options,
+                );
 
-            const resolvers = pendingResolvers.get(cacheKey);
-            if (resolvers) {
-                resolvers.forEach((r) => r.resolve(settings));
-                pendingResolvers.delete(cacheKey);
+                const resolvers = pendingResolvers.get(cacheKey);
+                if (resolvers) {
+                    resolvers.forEach((r) => r.resolve(settings));
+                    pendingResolvers.delete(cacheKey);
+                }
+            } catch (e) {
+                const resolvers = pendingResolvers.get(cacheKey);
+                if (resolvers) {
+                    resolvers.forEach((r) => r.reject(e));
+                    pendingResolvers.delete(cacheKey);
+                }
             }
         }
     } finally {
