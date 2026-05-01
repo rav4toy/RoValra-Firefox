@@ -565,7 +565,7 @@ export const SETTINGS_CONFIG = {
                     'Roblox is working on an A/B test which does this exact thing. This feature will be disabled when it releases.',
             },
             currencyTransferEnabled: {
-                label: 'Currency Transfer',
+                label: 'Send Robux',
                 description: [
                     'This allows Roblox Plus Subscribers to start a currency transfer by pressing the (...) on anyones profile.',
                 ],

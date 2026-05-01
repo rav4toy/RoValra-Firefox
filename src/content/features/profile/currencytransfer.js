@@ -3,26 +3,26 @@ import { getUserIdFromUrl } from '../../core/idExtractor.js';
 import { launchDeeplink } from '../../core/utils/launcher.js';
 import { showConfirmationPrompt } from '../../core/ui/confirmationPrompt.js';
 import { t } from '../../core/locale/i18n.js';
+import { getAuthenticatedUserId } from '../../core/user.js';
+import * as CacheHandler from '../../core/storage/cacheHandler.js';
 import {
     registerProfileContextMenuAction,
     createContextMenuButton,
 } from '../../core/ui/profile/contextMenu.js';
 
-const transferStatusCache = new Map();
+async function getCurrencyTransferStatus() {
+    const authedUserId = await getAuthenticatedUserId();
+    if (!authedUserId) return false;
 
-async function getCurrencyTransferStatus(userId) {
-    if (transferStatusCache.has(userId)) {
-        return transferStatusCache.get(userId);
-    }
+    const cacheKey = `is_roblox_plus_${authedUserId}`;
+    const cached = await CacheHandler.get('profile_data', cacheKey, 'session');
+    if (cached !== undefined) return cached;
 
     const profileApiPayload = {
-        profileId: userId,
-        components: [
-            {
-                component: 'Actions',
-            },
-        ],
+        profileId: authedUserId.toString(),
         profileType: 'User',
+        components: [{ component: 'UserProfileHeader' }],
+        includeComponentOrdering: true,
     };
 
     const statusPromise = (async () => {
@@ -34,21 +34,26 @@ async function getCurrencyTransferStatus(userId) {
                 body: profileApiPayload,
             });
 
-            const actions =
-                profileResponse?.components?.Actions?.contextual || [];
+            const isRobloxPlus =
+                profileResponse?.components?.UserProfileHeader?.isRobloxPlus ===
+                true;
 
-            return actions.includes('CurrencyTransfer');
+            await CacheHandler.set(
+                'profile_data',
+                cacheKey,
+                isRobloxPlus,
+                'session',
+            );
+            return isRobloxPlus;
         } catch (err) {
             console.error(
                 'RoValra: Failed to fetch currency transfer status.',
                 err,
             );
-            transferStatusCache.delete(userId);
             return false;
         }
     })();
 
-    transferStatusCache.set(userId, statusPromise);
     return statusPromise;
 }
 
@@ -58,10 +63,11 @@ async function addCurrencyTransferButton(menu) {
     }
     menu.dataset.rovalraCurrencyTransferBtnAdded = 'true';
 
+    const authedUserId = await getAuthenticatedUserId();
     const userId = getUserIdFromUrl();
-    if (!userId) return;
+    if (!userId || String(userId) === String(authedUserId)) return;
 
-    const canTransfer = await getCurrencyTransferStatus(userId);
+    const canTransfer = await getCurrencyTransferStatus();
     if (!canTransfer) return;
 
     const { button } = createContextMenuButton(
@@ -110,8 +116,7 @@ export function init() {
         if (!settings.currencyTransferEnabled) return;
 
         registerProfileContextMenuAction(addCurrencyTransferButton, () => {
-            const userId = getUserIdFromUrl();
-            if (userId) getCurrencyTransferStatus(userId);
+            getCurrencyTransferStatus();
         });
     });
 }

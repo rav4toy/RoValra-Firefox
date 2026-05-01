@@ -755,8 +755,8 @@
         "createdLabel": "Created"
     },
     "profile": {
-        "currencyTransfer": "Transfer Currency",
-        "currencyTransferConfirmation": "This will open the Roblox client to do the currency transfer.",
+        "currencyTransfer": "Send Robux",
+        "currencyTransferConfirmation": "This will open the Roblox client allowing you to send robux.",
         "openClient": "Open Client"
     }
 }
