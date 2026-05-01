@@ -143,8 +143,9 @@ const api = {
 };
 
 class HiddenGamesManager {
-    constructor(allHiddenGames) {
-        this.allGames = allHiddenGames;
+    constructor(groupId) {
+        this.groupId = groupId;
+        this.allGames = [];
         this.filteredGames = [];
         this.filters = { sort: 'default', order: 'desc' };
         this.displayedCount = 0;
@@ -259,7 +260,7 @@ class HiddenGamesManager {
                         ),
                     ],
                 ),
-                el('div', 'hidden-games-list', {
+                el('div', 'hidden-games-list rovalra-hidden-games-list', {
                     style: {
                         display: 'grid',
                         gridTemplateColumns:
@@ -268,9 +269,13 @@ class HiddenGamesManager {
                         padding: '24px',
                     },
                 }),
-                el('div', 'rovalra-load-more-container', {
-                    style: { padding: '10px 0', textAlign: 'center' },
-                }),
+                el(
+                    'div',
+                    'rovalra-load-more-container hidden-games-list rovalra-hidden-games-list',
+                    {
+                        style: { padding: '0', textAlign: 'center' },
+                    },
+                ),
             ],
         );
 
@@ -283,9 +288,7 @@ class HiddenGamesManager {
         );
 
         const { overlay } = createOverlay({
-            title: await t('hiddenGroupGames.overlayTitle', {
-                count: this.allGames.length,
-            }),
+            title: await t('hiddenGroupGames.buttonText'),
             bodyContent: body,
             maxWidth: '1200px',
             maxHeight: '85vh',
@@ -301,14 +304,29 @@ class HiddenGamesManager {
             });
         }
 
-        if (this.allGames.length === 0) {
-            this.elements.list.innerHTML = DOMPurify.sanitize(
-                `<p class="btr-no-servers-message">${await t('hiddenGroupGames.noHiddenGames')}</p>`,
-            );
-            this.elements.filters.style.display = 'none';
-        } else {
-            this.applyFilters();
-        }
+        (async () => {
+            try {
+                const [allGames, publicGames] = await Promise.all([
+                    api.getGroupGames(this.groupId, ACCESS_FILTER.ALL),
+                    api.getGroupGames(this.groupId, ACCESS_FILTER.PUBLIC),
+                ]);
+
+                const publicIds = new Set(publicGames.map((g) => g.id));
+                this.allGames = allGames.filter((g) => !publicIds.has(g.id));
+
+                if (this.allGames.length === 0) {
+                    this.elements.list.innerHTML = DOMPurify.sanitize(
+                        `<p class="btr-no-servers-message">${await t('hiddenGroupGames.noHiddenGames')}</p>`,
+                    );
+                    this.elements.filters.style.display = 'none';
+                    return;
+                }
+
+                await this.applyFilters();
+            } catch (err) {
+                console.warn('RoValra: Failed to load hidden games', err);
+            }
+        })();
     }
 
     async applyFilters() {
@@ -415,8 +433,8 @@ class HiddenGamesManager {
         )
             return;
         this.isPaginating = true;
-        this.elements.loader.innerHTML = DOMPurify.sanitize(
-            `<p class="rovalra-loading-text">${await t('hiddenGroupGames.loadingMore')}</p>`,
+        this.elements.loader.appendChild(
+            createShimmerGrid(12, { width: '150px', height: '240px' }),
         );
 
         try {
@@ -474,25 +492,10 @@ export function init() {
                 await t('hiddenGroupGames.buttonText'),
                 'secondary',
             );
-            btn.addEventListener('click', async () => {
+            btn.addEventListener('click', () => {
                 const groupId = getGroupIdFromUrl();
                 if (!groupId) return;
-
-                try {
-                    const [allGames, publicGames] = await Promise.all([
-                        api.getGroupGames(groupId, ACCESS_FILTER.ALL),
-                        api.getGroupGames(groupId, ACCESS_FILTER.PUBLIC),
-                    ]);
-
-                    const publicIds = new Set(publicGames.map((g) => g.id));
-                    const hiddenGames = allGames.filter(
-                        (g) => !publicIds.has(g.id),
-                    );
-
-                    new HiddenGamesManager(hiddenGames);
-                } catch (err) {
-                    console.warn('RoValra: Failed to load hidden games', err);
-                }
+                new HiddenGamesManager(groupId);
             });
 
             const container = el(
