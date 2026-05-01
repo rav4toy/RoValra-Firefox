@@ -302,6 +302,14 @@ export async function loadAndRenderEvents(eventsContainer, placeId) {
                     id && !isNaN(id) && !eventThumbnailCache.has(Number(id)),
             );
 
+        const gameThumbIdsToFetch = Array.from(
+            new Set(
+                apiEvents
+                    .filter((e) => !e.thumbnails?.[0]?.mediaId && e.placeId)
+                    .map((e) => e.placeId),
+            ),
+        ).filter((id) => id && !eventThumbnailCache.has(`game_${id}`));
+
         const rsvpIdsToFetch = apiEvents
             .map((e) => e.id)
             .filter((id) => id && !eventRsvpCache.has(id));
@@ -339,6 +347,28 @@ export async function loadAndRenderEvents(eventsContainer, placeId) {
             );
         }
 
+        if (gameThumbIdsToFetch.length > 0) {
+            promises.push(
+                (async () => {
+                    try {
+                        const fetchedMap = await fetchThumbnails(
+                            gameThumbIdsToFetch.map((id) => ({ id })),
+                            'GameThumbnail',
+                            '768x432',
+                        );
+                        fetchedMap.forEach((data, id) => {
+                            eventThumbnailCache.set(`game_${id}`, data);
+                        });
+                    } catch (e) {
+                        console.warn(
+                            'RoValra: Failed to fetch event fallback game thumbnails',
+                            e,
+                        );
+                    }
+                })(),
+            );
+        }
+
         if (promises.length > 0) {
             await Promise.all(promises);
         }
@@ -350,7 +380,7 @@ export async function loadAndRenderEvents(eventsContainer, placeId) {
                 const mediaId = event.thumbnails?.[0]?.mediaId;
                 const thumbData = mediaId
                     ? eventThumbnailCache.get(Number(mediaId))
-                    : null;
+                    : eventThumbnailCache.get(`game_${event.placeId}`);
                 const overrideText = originalPillTexts.get(String(event.id));
                 const rsvpCount = eventRsvpCache.get(event.id);
                 const card = createEventCard(
