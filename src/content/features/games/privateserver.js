@@ -217,6 +217,7 @@ async function addOwnerControls(serverItem, privateServerId) {
 
     if (initialData) {
         copyLinkBtn.disabled = !initialData.link;
+        copyLinkBtn.style.opacity = copyLinkBtn.disabled ? '0.5' : '1';
         if (initialData.active === false) {
             generateLinkBtn.disabled = true;
         }
@@ -232,6 +233,7 @@ async function addOwnerControls(serverItem, privateServerId) {
             if (res.ok) {
                 const data = await res.json();
                 copyLinkBtn.disabled = !data.link;
+                copyLinkBtn.style.opacity = copyLinkBtn.disabled ? '0.5' : '1';
                 if (data.active === false) {
                     generateLinkBtn.disabled = true;
                 }
@@ -274,6 +276,7 @@ async function addOwnerControls(serverItem, privateServerId) {
                     'privateServerPage.regenerated',
                 );
                 copyLinkBtn.disabled = false;
+                copyLinkBtn.style.opacity = '1';
             } else {
                 generateLinkBtn.textContent = await t('quickPlay.error');
             }
@@ -346,7 +349,7 @@ export async function addModernPrivateServerControls(
     shareBtnWrapper.style.cssText =
         'width: 95px; min-width: 95px; max-width: 95px;';
     shareBtnWrapper.innerHTML = DOMPurify.sanitize(`
-        <button type="button" ${!details.link ? 'disabled' : ''} class="foundation-web-button relative clip group/interactable focus-visible:outline-focus disabled:outline-none cursor-pointer relative flex items-center justify-center stroke-none padding-y-none select-none radius-medium text-label-small height-800 padding-x-small bg-action-standard content-action-standard width-full rovalra-share-btn">
+        <button type="button" ${!details.link ? 'disabled' : ''} style="opacity: ${!details.link ? '0.5' : '1'}" class="foundation-web-button relative clip group/interactable focus-visible:outline-focus disabled:outline-none cursor-pointer relative flex items-center justify-center stroke-none padding-y-none select-none radius-medium text-label-small height-800 padding-x-small bg-action-standard content-action-standard width-full rovalra-share-btn">
             <div role="presentation" class="absolute inset-[0] transition-colors group-hover/interactable:bg-[var(--color-state-hover)] group-active/interactable:bg-[var(--color-state-press)] group-disabled/interactable:bg-none"></div>
             <span class="flex items-center min-width-0 gap-xsmall">
                 <span class="padding-y-xsmall text-truncate-end text-no-wrap">${ts('quickPlay.copyLink', { defaultValue: 'Copy Link' })}</span>
@@ -411,8 +414,12 @@ export async function addModernPrivateServerControls(
 
                 const currentShareBtn =
                     btnContainer.querySelector('.rovalra-share-btn');
-                if (currentShareBtn)
+                if (currentShareBtn) {
                     currentShareBtn.disabled = !newDetails?.link;
+                    currentShareBtn.style.opacity = currentShareBtn.disabled
+                        ? '0.5'
+                        : '1';
+                }
 
                 span.textContent = await t('privateServerPage.regenerated', {
                     defaultValue: 'Regenerated!',

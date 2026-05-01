@@ -62,11 +62,7 @@ const SHARED_STYLES = `
 
     body.rovalra-filter-active .rbx-public-running-games-footer { display: none !important; }
 
-    .rovalra-modern-container {
-        max-width: 900px !important;
-        margin-left: auto !important;
-        margin-right: auto !important;
-    }
+
 
     .rovalra-modern-ui .flex.flex-col.min-width-0 {
         display: flex !important;
