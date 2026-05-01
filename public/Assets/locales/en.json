@@ -753,5 +753,10 @@
     },
     "groups": {
         "createdLabel": "Created"
+    },
+    "profile": {
+        "currencyTransfer": "Transfer Currency",
+        "currencyTransferConfirmation": "This will open the Roblox client to do the currency transfer.",
+        "openClient": "Open Client"
     }
 }

@@ -100,6 +100,7 @@ import { init as initUnfriend } from './features/profile/friends/unfriend.js';
 import { init as initProfileBackground } from './features/profile/header/profileBackground.js';
 import { init as initRobuxIcons } from './core/ui/robuxIcon.js';
 import { init as initPurchasePromptItemId } from './core/catalog/purchasePromptItemId.js';
+import { init as initCurrencyTransfer } from './features/profile/currencytransfer.js';
 
 // Settings
 import { init as initSettingsPage } from './features/settings/index.js';
@@ -236,6 +237,7 @@ const featureRoutes = [
             initUnfriend,
             initLastPlayed,
             initGroupRole,
+            initCurrencyTransfer,
         ],
     },
     {

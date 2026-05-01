@@ -3,12 +3,13 @@ import { callRobloxApiJson } from '../api.js';
 
 function executeLaunchScript(codeToInject) {
     if (typeof chrome !== 'undefined' && chrome.runtime) {
-        chrome.runtime.sendMessage({ action: "injectScript", codeToInject });
+        chrome.runtime.sendMessage({ action: 'injectScript', codeToInject });
     } else {
-        console.error("RoValra Launcher: Chrome runtime is not available to inject the script.");
+        console.error(
+            'RoValra Launcher: Chrome runtime is not available to inject the script.',
+        );
     }
 }
-
 
 export function launchGame(placeId, jobId = null) {
     const joinFunction = jobId
@@ -18,17 +19,15 @@ export function launchGame(placeId, jobId = null) {
     executeLaunchScript(codeToInject);
 }
 
-
 export function launchPrivateGame(placeId, accessCode, linkCode) {
     const joinFunction = `Roblox.GameLauncher.joinPrivateGame(parseInt('${placeId}', 10), '${accessCode}', '${linkCode}')`;
     const codeToInject = `if (typeof Roblox?.GameLauncher?.joinPrivateGame === 'function') { ${joinFunction}; }`;
     executeLaunchScript(codeToInject);
 }
 
-
 export function launchMultiplayerGame(placeId, launchData = {}) {
     window.__rovalra_skipNextLaunch = true;
-    
+
     const joinData = { launchData };
     const codeToInject = `if (typeof Roblox.GameLauncher.joinMultiplayerGame === 'function') { Roblox.GameLauncher.joinMultiplayerGame(${placeId}, false, false, null, null, ${JSON.stringify(joinData)}); }`;
     executeLaunchScript(codeToInject);
@@ -53,21 +52,36 @@ export async function launchStudioForGame(placeId) {
     try {
         const gameDetails = await callRobloxApiJson({
             subdomain: 'games',
-            endpoint: `/v1/games/multiget-place-details?placeIds=${placeId}`
+            endpoint: `/v1/games/multiget-place-details?placeIds=${placeId}`,
         });
 
-        if (gameDetails && gameDetails.length > 0 && gameDetails[0].universeId) {
+        if (
+            gameDetails &&
+            gameDetails.length > 0 &&
+            gameDetails[0].universeId
+        ) {
             const universeId = gameDetails[0].universeId;
             const editFunction = `Roblox.GameLauncher.editGameInStudio(${placeId}, ${universeId})`;
             const codeToInject = `if (typeof Roblox?.GameLauncher?.editGameInStudio === 'function') { ${editFunction}; }`;
             executeLaunchScript(codeToInject);
         } else {
-            throw new Error(`Could not retrieve universeId for placeId ${placeId}`);
+            throw new Error(
+                `Could not retrieve universeId for placeId ${placeId}`,
+            );
         }
     } catch (error) {
-        console.error('RoValra Launcher: Failed to launch studio with universeId, falling back.', error);
+        console.error(
+            'RoValra Launcher: Failed to launch studio with universeId, falling back.',
+            error,
+        );
         const uri = `roblox-studio:launchmode:edit+task:EditPlace+placeId:${placeId}`;
         const codeToInject = `window.location.href = '${uri}';`;
         executeLaunchScript(codeToInject);
     }
+}
+
+export function launchDeeplink(url) {
+    const safeUrl = url.replace(/'/g, "\\'");
+    const codeToInject = `if (typeof Roblox?.GameLauncher?.openProtocolUrl === 'function') { Roblox.GameLauncher.openProtocolUrl('${safeUrl}'); } else { window.location.href = '${safeUrl}'; }`;
+    executeLaunchScript(codeToInject);
 }

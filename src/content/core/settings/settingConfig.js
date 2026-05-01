@@ -562,6 +562,14 @@ export const SETTINGS_CONFIG = {
                 type: 'checkbox',
                 default: true,
             },
+            currencyTransferEnabled: {
+                label: 'Currency Transfer',
+                description: [
+                    'This allows Roblox Plus Subscribers to start a currency transfer by pressing the (...) on anyones profile.',
+                ],
+                type: 'checkbox',
+                default: true,
+            },
             lastOnlineEnabled: {
                 label: 'Show Last Online / Last Seen',
                 description: [
