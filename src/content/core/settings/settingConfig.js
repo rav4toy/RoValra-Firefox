@@ -304,7 +304,7 @@ export const SETTINGS_CONFIG = {
                 ],
                 type: 'checkbox',
                 default: true,
-                storageKey: 'rovalra_transactions_data',
+                storageKey: 'rovalra_transactions_v2',
             },
             OldestVersionEnabled: {
                 label: 'Oldest Server Version',

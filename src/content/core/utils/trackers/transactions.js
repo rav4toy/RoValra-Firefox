@@ -1,7 +1,7 @@
 import { callRobloxApiJson } from '../../api';
 import { getAuthenticatedUserId } from '../../user';
 
-const TRANSACTIONS_DATA_KEY = 'rovalra_transactions_data';
+const TRANSACTIONS_DATA_KEY = 'rovalra_transactions_v2';
 
 export async function getTransactionData() {
     const userId = await getAuthenticatedUserId();
@@ -86,14 +86,16 @@ export async function getGameSpending(id) {
             totalSpent += creator.games[id].totalSpent;
             totalTransactions += creator.games[id].totalTransactions;
             gameName = creator.games[id].name;
-
-            return {
-                name: gameName,
-                totalSpent,
-                totalTransactions,
-                isScanning,
-            };
         }
+    }
+
+    if (totalTransactions > 0) {
+        return {
+            name: gameName,
+            totalSpent,
+            totalTransactions,
+            isScanning,
+        };
     }
 
     const universeId = await getUniverseIdFromPlaceId(id);
@@ -106,8 +108,6 @@ export async function getGameSpending(id) {
                 totalTransactions +=
                     creator.games[universeId].totalTransactions;
                 gameName = creator.games[universeId].name;
-
-                break;
             }
         }
     }

@@ -640,7 +640,7 @@ function updateAvatarRotator() {
 
 // --- Transaction Tracking ---
 
-const TRANSACTIONS_DATA_KEY = 'rovalra_transactions_data';
+const TRANSACTIONS_DATA_KEY = 'rovalra_transactions_v2';
 const TRANSACTION_REFRESH_DURATION = 5 * 60 * 1000;
 const TRANSACTION_REQUEST_DELAY = 5000;
 
@@ -670,15 +670,18 @@ async function fetchTransactionsPage(userId, cursor = null) {
 }
 
 function processTransaction(transaction) {
+    if (!transaction || !transaction.currency || !transaction.agent)
+        return null;
+
     const base = {
-        amount: Math.abs(transaction.currency.amount),
-        purchaseToken: transaction.purchaseToken,
-        creatorId: transaction.agent.id,
-        creatorType: transaction.agent.type,
-        creatorName: transaction.agent.name,
+        amount: Math.abs(transaction.currency.amount || 0),
+        purchaseToken: transaction.purchaseToken || null,
+        creatorId: transaction.agent.id || 0,
+        creatorType: transaction.agent.type || 'User',
+        creatorName: transaction.agent.name || 'Unknown',
     };
 
-    if (transaction.details.place) {
+    if (transaction.details?.place) {
         return {
             ...base,
             universeId: transaction.details.place.universeId,
@@ -696,6 +699,7 @@ function mergeTransactionsIntoAggregated(existingAggregated, rawTransactions) {
 
     rawTransactions.forEach((tx) => {
         const processed = processTransaction(tx);
+        if (!processed) return;
 
         updated.totals.totalSpent += processed.amount;
         updated.totals.totalTransactions += 1;
@@ -781,7 +785,7 @@ async function runTransactionLoop(userId, existingData, isIncremental) {
 
         if (!data.data || data.data.length === 0) {
             emptyPageCount++;
-            if (emptyPageCount >= 3 || !data.nextPageCursor) break;
+            if (emptyPageCount >= 5 || !data.nextPageCursor) break;
             cursor = data.nextPageCursor;
             continue;
         }
@@ -789,11 +793,16 @@ async function runTransactionLoop(userId, existingData, isIncremental) {
 
         const newBatch = [];
         for (const tx of data.data) {
-            if (seenTokens.has(tx.purchaseToken)) continue;
-            seenTokens.add(tx.purchaseToken);
+            const uniqueKey =
+                tx.purchaseToken ||
+                tx.idHash ||
+                `${tx.created || ''}-${tx.amount || ''}-${tx.agent?.id || ''}-${tx.details?.id || tx.details?.place?.placeId || ''}`;
+            if (!uniqueKey || seenTokens.has(uniqueKey)) continue;
+            seenTokens.add(uniqueKey);
 
             if (
                 isIncremental &&
+                tx.purchaseToken &&
                 currentAggregated.latestPurchaseTokens.includes(
                     tx.purchaseToken,
                 )
@@ -811,8 +820,10 @@ async function runTransactionLoop(userId, existingData, isIncremental) {
 
         if (pagesChecked === 0) {
             const firstTokens = data.data
-                .slice(0, 2)
-                .map((tx) => tx.purchaseToken);
+                .map((tx) => tx.purchaseToken)
+                .filter(Boolean)
+                .slice(0, 2);
+
             currentAggregated.latestPurchaseTokens = [
                 ...new Set([
                     ...firstTokens,
@@ -851,6 +862,8 @@ async function runTransactionLoop(userId, existingData, isIncremental) {
 // --- Event Listeners ---
 
 chrome.runtime.onInstalled.addListener((details) => {
+    chrome.storage.local.remove('rovalra_transactions_data');
+
     initializeSettings(details.reason);
     setupContextMenuListener();
 });
