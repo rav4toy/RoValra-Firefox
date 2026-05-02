@@ -1,9 +1,8 @@
-\## 2.4.15.2 Firefox 25/04/2026
+\## 2.4.15.2 Firefox 02/05/2026
 
-&#x20; # Changes :
+&#x20; # Fixes :
 
-* Updated some more stuff related to RoValra
-* Fixed Updates tab showing sometimes as blank
+* Actually fixed Updates tab now.
 
 
 
@@ -25,9 +24,8 @@
 
 &#x20; # Fixes :
 
-Fixed some labels not showing correctly.
-
-Fixed RoValra not joining the closest server after a bit of searching.
+* Fixed some labels not showing correctly.
+* Fixed RoValra not joining the closest server after a bit of searching.
 
 
 

@@ -57988,7 +57988,7 @@ Markdown test
             document.getElementById("tab-updates")?.remove(), document.getElementById("updates-content-pane")?.remove();
             let { contentPane } = createTab({
               id: "updates",
-              label: ts2("updateHistory.tabTitle"),
+              label: (ts2("updateHistory.tabTitle") || "Updates"),
               container: tabContainer,
               contentContainer: contentSection,
               hash: "#!/updates"
