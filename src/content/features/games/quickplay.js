@@ -122,6 +122,249 @@ function getGameIdsFromLink(href) {
     }
 }
 
+
+const PAID_PRICE_BADGE_CLASS = 'rovalra-paid-access-price-badge';
+const PAID_PRICE_PROCESSED_CLASS = 'rovalra-paid-price-processed';
+const paidPriceCache = new Map();
+const paidPriceQueue = new Map();
+let paidPriceTimer = null;
+
+function getPaidPriceStore() {
+    if (
+        !window.__rovalraPaidAccessPrices ||
+        !window.__rovalraPaidAccessPrices.set
+    ) {
+        window.__rovalraPaidAccessPrices = new Map();
+    }
+    return window.__rovalraPaidAccessPrices;
+}
+
+function injectPaidPriceBadgeStyles() {
+    if (document.getElementById('rovalra-paid-price-badge-styles')) return;
+
+    const style = document.createElement('style');
+    style.id = 'rovalra-paid-price-badge-styles';
+    style.textContent = `
+        .${PAID_PRICE_BADGE_CLASS} {
+            position: absolute;
+            z-index: 5;
+            right: 5px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            height: 17px;
+            padding: 0 6px;
+            border-radius: 999px;
+            background: #335fff;
+            color: #fff;
+            font-size: 11px;
+            font-weight: 700;
+            line-height: 1;
+            white-space: nowrap;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+            pointer-events: none;
+        }
+    `;
+    document.documentElement.appendChild(style);
+}
+
+function getPaidPriceCardRoot(gameLink) {
+    return (
+        gameLink.closest(
+            '.game-card-container, .game-card, .list-item, .item-card, li, .game-tile',
+        ) ||
+        gameLink.parentElement ||
+        gameLink
+    );
+}
+
+function hasNativePaidPrice(gameLink, price) {
+    const card = getPaidPriceCardRoot(gameLink);
+    if (!card) return false;
+
+    const clone = card.cloneNode(true);
+    clone
+        .querySelectorAll?.(`.${PAID_PRICE_BADGE_CLASS}`)
+        .forEach((node) => node.remove());
+
+    const text = (clone.textContent || '').replace(/\s+/g, ' ').trim();
+    if (/\b\d[\d,.]*\s*Robux\b/i.test(text)) return true;
+
+    const escapedPrice = String(price || '').replace(
+        /[.*+?^${}()|[\]\\]/g,
+        '\\$&',
+    );
+    if (
+        price &&
+        new RegExp(`\\b${escapedPrice}\\b`).test(text) &&
+        card.querySelector(
+            '.icon-robux, [class*="robux" i], [aria-label*="Robux" i], [title*="Robux" i]',
+        )
+    ) {
+        return true;
+    }
+
+    return false;
+}
+
+function isLargeSearchCard(gameLink) {
+    const card = getPaidPriceCardRoot(gameLink);
+    const rect = (card || gameLink).getBoundingClientRect?.();
+    if (rect && rect.width > 430) return true;
+
+    const text = (card?.textContent || '').replace(/\s+/g, ' ');
+    return /\bBy\s+[^\n]+/.test(text) || text.length > 180;
+}
+
+function placePaidPriceBadge(gameLink, badge, nameEl) {
+    const linkRect = gameLink.getBoundingClientRect();
+    const nameRect = nameEl.getBoundingClientRect();
+    const top = nameRect.top - linkRect.top + (nameRect.height - 17) / 2;
+
+    gameLink.style.position = gameLink.style.position || 'relative';
+    nameEl.style.paddingRight = '72px';
+    badge.style.top = `${Math.max(0, Math.round(top))}px`;
+}
+
+function addPaidPriceBadge(gameLink, price) {
+    price = Number(price || 0);
+    if (
+        !price ||
+        !gameLink ||
+        gameLink.querySelector(`.${PAID_PRICE_BADGE_CLASS}`)
+    ) {
+        return;
+    }
+    if (hasNativePaidPrice(gameLink, price) || isLargeSearchCard(gameLink)) {
+        return;
+    }
+
+    const nameEl = gameLink.querySelector('.game-card-name, .game-name-title');
+    if (!nameEl) return;
+
+    injectPaidPriceBadgeStyles();
+
+    const badge = document.createElement('span');
+    badge.className = PAID_PRICE_BADGE_CLASS;
+    badge.textContent = `${price.toLocaleString()} Robux`;
+    badge.title = `Paid access: ${price.toLocaleString()} Robux`;
+
+    gameLink.appendChild(badge);
+    placePaidPriceBadge(gameLink, badge, nameEl);
+
+    setTimeout(() => {
+        if (badge.isConnected && nameEl.isConnected) {
+            placePaidPriceBadge(gameLink, badge, nameEl);
+        }
+    }, 250);
+}
+
+async function fetchPaidPriceChunk(placeIds) {
+    const endpoint = `/v1/games/multiget-place-details?${placeIds
+        .map((id) => `placeIds=${encodeURIComponent(id)}`)
+        .join('&')}`;
+
+    const placeRes = await callRobloxApi({
+        subdomain: 'games',
+        endpoint,
+        method: 'GET',
+    });
+    const placeData = placeRes.ok ? await placeRes.json() : [];
+
+    const prices = new Map();
+    const universeToPlaceIds = new Map();
+
+    if (Array.isArray(placeData)) {
+        for (const item of placeData) {
+            const itemPlaceId = String(
+                item?.placeId ?? item?.PlaceId ?? item?.id ?? '',
+            );
+            const universeId = String(
+                item?.universeId ?? item?.UniverseId ?? '',
+            );
+            const price = Number(
+                item?.price ??
+                    item?.Price ??
+                    item?.accessPrice ??
+                    item?.priceInRobux ??
+                    0,
+            );
+
+            if (itemPlaceId) prices.set(itemPlaceId, price);
+            if (itemPlaceId && universeId) {
+                if (!universeToPlaceIds.has(universeId)) {
+                    universeToPlaceIds.set(universeId, []);
+                }
+                universeToPlaceIds.get(universeId).push(itemPlaceId);
+            }
+        }
+    }
+
+    return prices;
+}
+
+function flushPaidPriceQueue() {
+    const entries = Array.from(paidPriceQueue.entries());
+    paidPriceQueue.clear();
+    paidPriceTimer = null;
+
+    const unresolved = entries.filter(([placeId]) =>
+        !paidPriceCache.has(placeId),
+    );
+    const unresolvedLinks = new Map(unresolved);
+
+    for (const [placeId, links] of entries) {
+        if (!paidPriceCache.has(placeId)) continue;
+        links.forEach((link) => addPaidPriceBadge(link, paidPriceCache.get(placeId)));
+    }
+
+    const placeIds = unresolved.map(([placeId]) => placeId).filter(Boolean);
+    if (!placeIds.length) return;
+
+    for (let i = 0; i < placeIds.length; i += 6) {
+        const chunk = placeIds.slice(i, i + 6);
+        fetchPaidPriceChunk(chunk)
+            .then((prices) => {
+                for (const placeId of chunk) {
+                    const price = prices.get(String(placeId)) || 0;
+                    paidPriceCache.set(placeId, price);
+                    getPaidPriceStore().set(String(placeId), price);
+                    const links = unresolvedLinks.get(placeId) || [];
+                    links.forEach((link) => addPaidPriceBadge(link, price));
+                }
+            })
+            .catch(() => {
+                chunk.forEach((placeId) => {
+                    paidPriceCache.set(placeId, 0);
+                    getPaidPriceStore().set(String(placeId), 0);
+                });
+            });
+    }
+}
+
+function setupPaidPriceBadge(gameLink) {
+    if (!gameLink || gameLink.classList.contains(PAID_PRICE_PROCESSED_CLASS)) {
+        return;
+    }
+
+    const { placeId } = getGameIdsFromLink(gameLink.href);
+    if (!placeId) return;
+
+    gameLink.classList.add(PAID_PRICE_PROCESSED_CLASS);
+
+    if (paidPriceCache.has(placeId)) {
+        addPaidPriceBadge(gameLink, paidPriceCache.get(placeId));
+        return;
+    }
+
+    if (!paidPriceQueue.has(placeId)) paidPriceQueue.set(placeId, []);
+    paidPriceQueue.get(placeId).push(gameLink);
+
+    if (!paidPriceTimer) {
+        paidPriceTimer = setTimeout(flushPaidPriceQueue, 450);
+    }
+}
+
 function showTemporaryTooltip(parent, text, duration = 1400) {
     const temp = document.createElement('div');
     temp.className = 'rovalra-ps-tooltip';
@@ -821,6 +1064,8 @@ function initializeQuickPlay() {
                 if (gameLink.closest('[data-testid="event-experience-link"]')) {
                     return;
                 }
+                setupPaidPriceBadge(gameLink);
+
                 if (gameLink.classList.contains(PROCESSED_MARKER_CLASS)) return;
                 gameLink.classList.add(PROCESSED_MARKER_CLASS);
 
