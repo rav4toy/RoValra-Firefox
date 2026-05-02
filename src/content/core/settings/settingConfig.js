@@ -1,7 +1,5 @@
 import {
     ROBUX_FIAT_ESTIMATE_DEFAULT_GRADIENT,
-    ROBUX_FIAT_ESTIMATE_STYLE_MODE_SOLID,
-    ROBUX_FIAT_ESTIMATE_STYLE_OPTIONS,
     TRANSACTION_FIAT_CURRENCY_OPTIONS,
     TRANSACTION_FIAT_RATE_OPTIONS,
 } from '../transactions/fiatConfig.js';
@@ -19,17 +17,6 @@ export const SETTINGS_CONFIG = {
                     'The sales data is very likely to be inaccurate on items that are for sale, but very likely to be correct on off-sale items.',
                 ],
                 deprecated: 'Sale stats are very old and now inaccurate.',
-                type: 'checkbox',
-                default: false,
-            },
-            hiddenCatalogEnabled: {
-                label: 'Hidden Catalog',
-                description: [
-                    'Shows Roblox made items before they are on the official marketplace.',
-                ],
-                deprecated: 'Patched by Roblox',
-                locked: 'This feature has been patched by Roblox and is no longer functional.',
-                isPermanent: true,
                 type: 'checkbox',
                 default: false,
             },
@@ -233,14 +220,25 @@ export const SETTINGS_CONFIG = {
                 type: 'checkbox',
                 default: false,
             },
-            privateGameDetectionEnabled: {
+            privateGameViewerEnabled: {
                 label: 'View Private / Moderated Games',
                 description: [
                     'This recreates the experience page of private / moderated games, allowing you to view them.',
                 ],
                 type: 'checkbox',
-                default: false,
-                requiredPermissions: ['webRequest'],
+                default: true,
+                childSettings: {
+                    privateGameDetectionFallbackEnabled: {
+                        label: 'Use background detection fallback',
+                        description: [
+                            'Uses background web requests to detect private games when the local tracker fails.',
+                            'This method is more reliable but requires additional permissions.',
+                        ],
+                        type: 'checkbox',
+                        default: false,
+                        requiredPermissions: ['webRequest'],
+                    },
+                },
             },
             botdataEnabled: {
                 label: 'Bot Data',
@@ -304,7 +302,7 @@ export const SETTINGS_CONFIG = {
                 ],
                 type: 'checkbox',
                 default: true,
-                storageKey: 'rovalra_transactions_data',
+                storageKey: 'rovalra_transactions_v2',
             },
             OldestVersionEnabled: {
                 label: 'Oldest Server Version',
@@ -563,6 +561,16 @@ export const SETTINGS_CONFIG = {
                 ],
                 type: 'checkbox',
                 default: true,
+                deprecated:
+                    'Roblox is working on an A/B test which does this exact thing. This feature will be disabled when it releases.',
+            },
+            currencyTransferEnabled: {
+                label: 'Send Robux',
+                description: [
+                    'This allows Roblox Plus Subscribers to start a currency transfer by pressing the (...) on anyones profile.',
+                ],
+                type: 'checkbox',
+                default: true,
             },
             lastOnlineEnabled: {
                 label: 'Show Last Online / Last Seen',
@@ -762,12 +770,23 @@ export const SETTINGS_CONFIG = {
                     },
                 },
             },
-            bannedUserDetectionEnabled: {
+            bannedUserViewerEnabled: {
                 label: 'View Banned Users Profile',
                 description: ['Allows you to view banned users Profile.'],
                 type: 'checkbox',
-                default: false,
-                requiredPermissions: ['webRequest'],
+                default: true,
+                childSettings: {
+                    bannedUserDetectionFallbackEnabled: {
+                        label: 'Use background detection fallback',
+                        description: [
+                            'Uses background web requests to detect banned users when the local tracker fails.',
+                            'This method is more reliable but requires additional permissions.',
+                        ],
+                        type: 'checkbox',
+                        default: false,
+                        requiredPermissions: ['webRequest'],
+                    },
+                },
             },
         },
     },
@@ -931,27 +950,10 @@ export const SETTINGS_CONFIG = {
                         options: TRANSACTION_FIAT_RATE_OPTIONS,
                         default: 'normal',
                     },
-                    robuxFiatEstimateStyleMode: {
-                        label: 'Text Style',
-                        description: [
-                            'Choose between a solid color or a two-color gradient for the fiat estimate text.',
-                        ],
-                        type: 'select',
-                        options: ROBUX_FIAT_ESTIMATE_STYLE_OPTIONS,
-                        default: ROBUX_FIAT_ESTIMATE_STYLE_MODE_SOLID,
-                    },
-                    robuxFiatEstimateColor: {
-                        label: 'Estimate Text Color',
-                        description: [
-                            'Pick the color used for the fiat estimate text shown next to Robux values. Used when Text Style is set to Solid Color.',
-                        ],
-                        type: 'color',
-                        default: '#7a7d81',
-                    },
                     robuxFiatEstimateGradient: {
                         label: 'Estimate Text Gradient',
                         description: [
-                            'Customize the gradient used for the fiat estimate text. Used when Text Style is set to Gradient.',
+                            'Customize the gradient used for the fiat estimate text.',
                         ],
                         type: 'gradient',
                         default: ROBUX_FIAT_ESTIMATE_DEFAULT_GRADIENT,
@@ -1276,6 +1278,14 @@ export const SETTINGS_CONFIG = {
                 requiredPermissions: ['contextMenus'],
             },
 
+            modernIconsEnabled: {
+                label: 'Modern Icons',
+                description: [
+                    'Replaces default Roblox playing and like icons on the site, with the new modern icons used by the client.',
+                ],
+                type: 'checkbox',
+                default: true,
+            },
             cssfixesEnabled: {
                 label: 'Site Fixes',
                 description: [

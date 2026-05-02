@@ -1,11 +1,11 @@
 import { initializeObserver, startObserving } from './core/observer.js';
 import { detectTheme, dispatchThemeEvent } from './core/theme.js';
+import { getValidAccessToken } from './core/oauth/oauth.js';
 // Site wide
 import { init as initOnboarding } from './features/onboarding/onboarding.js';
 import { init as initWhatAmIJoining } from './features/games/revertlogo.js';
 import { init as initEasterEggLinks } from './features/sitewide/easterEggs/links.js';
 import { init as initCssFixes } from './features/sitewide/cssfixes.js';
-import { init as initHiddenCatalog } from './features/catalog/hiddenCatalog.js';
 import { init as initServerListener } from './features/games/serverlistener.js';
 import { init as initBetaPrograms } from './features/navigation/betaprograms.js';
 import { init as initVideoTest } from './features/developer/videotest.js';
@@ -13,6 +13,7 @@ import { init as initStreamerMode } from './features/sitewide/streamermode.js';
 import { init as initMarkDownTest } from './features/developer/markdowntest.js';
 import { init as initTests } from './features/developer/tests.js';
 import { init as initApiDocs } from './features/developer/apiDocs.js';
+import { init as initModeration } from './features/moderation/moderation.js';
 import { init as initApiKey } from './core/utils/trackers/apiKey.js';
 import { init as initServerTracker } from './core/utils/trackers/servers.js';
 import { initFriendsListTracking } from './core/utils/trackers/friendslist.js';
@@ -23,8 +24,10 @@ import { init as initCopyId } from './features/sitewide/copyid.js';
 import { init as initQuickSearch } from './features/navigation/search/quicksearch.js';
 import { init as initRenderTest } from './features/developer/rendertest.js';
 import { init as initGroupFunds } from './features/navigation/groupfunds.js';
+import { init as initUrlTracker } from './core/utils/trackers/urlTracker.js';
 import { init as initCustomFont } from './features/sitewide/customFont.js';
 import { init as initTransactionsLink } from './features/navigation/transactionslink.js';
+import { initializeModernIcons as initModernIcons } from './features/sitewide/modernIcons.js';
 
 // Avatar
 import { init as initAvatarFilters } from './features/avatar/filters.js';
@@ -98,6 +101,7 @@ import { init as initUnfriend } from './features/profile/friends/unfriend.js';
 import { init as initProfileBackground } from './features/profile/header/profileBackground.js';
 import { init as initRobuxIcons } from './core/ui/robuxIcon.js';
 import { init as initPurchasePromptItemId } from './core/catalog/purchasePromptItemId.js';
+import { init as initCurrencyTransfer } from './features/profile/currencytransfer.js';
 
 // Settings
 import { init as initSettingsPage } from './features/settings/index.js';
@@ -119,7 +123,6 @@ const featureRoutes = [
             initEasterEggLinks,
             initCssFixes,
             initWhatAmIJoining,
-            initHiddenCatalog,
             initServerListener,
             initOnboarding,
             initVideoTest,
@@ -145,6 +148,8 @@ const featureRoutes = [
             initRobuxIcons,
             initProfileBackground,
             initPurchasePromptItemId,
+            initUrlTracker,
+            initModernIcons,
         ],
     },
     // pretty much just the 40% method
@@ -234,6 +239,7 @@ const featureRoutes = [
             initUnfriend,
             initLastPlayed,
             initGroupRole,
+            initCurrencyTransfer,
         ],
     },
     {
@@ -263,6 +269,11 @@ const featureRoutes = [
     {
         paths: ['/docs'],
         features: [initApiDocs],
+    },
+    // Moderation Panel
+    {
+        paths: ['/moderation'],
+        features: [initModeration],
     },
     // create
     {
@@ -307,6 +318,18 @@ async function initializePage() {
 
     initializeObserver();
     const observerStatus = startObserving();
+
+    try {
+        await getValidAccessToken(false, false);
+    } catch (error) {
+        console.error('RoValra: OAuth token initialization failed', error);
+    }
+
+    try {
+        await initApiKey();
+    } catch (error) {
+        console.error('RoValra: API key initialization failed', error);
+    }
 
     const onDomReady = async () => {
         detectTheme().then((theme) => dispatchThemeEvent(theme));

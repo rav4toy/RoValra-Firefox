@@ -214,16 +214,18 @@ export function initRecentServers() {
             let section = container.querySelector(
                 '#rbx-recent-running-games-rovalra',
             );
+            let separator = container.querySelector(
+                '.rovalra-modern-separator',
+            );
+
             if (section) {
                 const isSectionModern =
                     section.classList.contains('rovalra-modern-ui');
                 if (isModern !== isSectionModern) {
                     section.remove();
                     section = null;
-                    const separator = container.querySelector(
-                        '.rovalra-modern-separator',
-                    );
                     if (separator) separator.remove();
+                    separator = null;
                 }
             }
 
@@ -270,23 +272,6 @@ export function initRecentServers() {
                     grid.className = 'flex flex-col rbx-recent-servers-grid';
 
                     section.append(headerWrapper, grid);
-
-                    const separator = document.createElement('div');
-                    separator.className =
-                        'margin-y-large rovalra-modern-separator';
-                    separator.innerHTML =
-                        '<div role="separator" data-orientation="horizontal" aria-orientation="horizontal" class="stroke-default self-stretch" style="border-right-width: 0px; border-bottom-width: 0px; box-sizing: border-box; border-style: solid; height: 0px; border-top-width: var(--stroke-standard); border-left-width: 0px;"></div>';
-
-                    const modernSections = container.querySelectorAll(
-                        '.flex.flex-col.gap-large.width-full',
-                    );
-                    if (modernSections.length >= 2) {
-                        modernSections[1].before(section);
-                        section.after(separator);
-                    } else {
-                        container.appendChild(section);
-                        container.appendChild(separator);
-                    }
                 } else {
                     section.className = 'server-list-section';
                     const content = `
@@ -304,28 +289,71 @@ export function initRecentServers() {
                     `;
                     section.innerHTML = DOMPurify.sanitize(content);
 
-                    const friendsSection = container.querySelector(
-                        '#rbx-friends-running-games',
-                    );
-                    const publicSection = container.querySelector(
-                        '#rbx-public-running-games',
-                    );
-                    if (friendsSection) {
-                        friendsSection.before(section);
-                    } else if (publicSection) {
-                        publicSection.before(section);
-                    } else {
-                        container.appendChild(section);
-                    }
-                }
-
-                if (!isModern) {
                     const refreshButton = section.querySelector('.rbx-refresh');
                     if (refreshButton) {
                         refreshButton.addEventListener('click', () =>
                             renderRecentServers(section),
                         );
                     }
+                }
+            }
+
+            if (isModern) {
+                if (!separator) {
+                    separator = document.createElement('div');
+                    separator.className =
+                        'margin-y-large rovalra-modern-separator';
+                    separator.innerHTML =
+                        '<div role="separator" data-orientation="horizontal" aria-orientation="horizontal" class="stroke-default self-stretch" style="border-right-width: 0px; border-bottom-width: 0px; box-sizing: border-box; border-style: solid; height: 0px; border-top-width: var(--stroke-standard); border-left-width: 0px;"></div>';
+                }
+
+                const modernSections = Array.from(
+                    container.querySelectorAll(
+                        '.flex.flex-col.gap-large.width-full',
+                    ),
+                ).filter((s) => s !== section);
+
+                if (modernSections.length >= 2) {
+                    modernSections[1].before(section);
+                    section.after(separator);
+                } else if (modernSections.length === 1) {
+                    const firstSection = modernSections[0];
+                    const h3Text =
+                        firstSection
+                            .querySelector('h3')
+                            ?.textContent?.toLowerCase() || '';
+                    if (
+                        h3Text.includes('friends') ||
+                        h3Text.includes('private') ||
+                        firstSection.querySelector(
+                            'a[href*="/info/vip-server"]',
+                        )
+                    ) {
+                        firstSection.after(separator);
+                        separator.after(section);
+                    } else {
+                        firstSection.before(section);
+                        section.after(separator);
+                    }
+                } else {
+                    if (section.parentElement !== container)
+                        container.appendChild(section);
+                    if (separator.parentElement !== container)
+                        container.appendChild(separator);
+                }
+            } else {
+                const friendsSection = container.querySelector(
+                    '#rbx-friends-running-games',
+                );
+                const publicSection = container.querySelector(
+                    '#rbx-public-running-games',
+                );
+                if (friendsSection) {
+                    friendsSection.before(section);
+                } else if (publicSection) {
+                    publicSection.before(section);
+                } else if (section.parentElement !== container) {
+                    container.appendChild(section);
                 }
             }
 
@@ -408,9 +436,10 @@ async function renderRecentServers(section) {
             .forEach((el) => el.remove());
 
         const spinnerSection = document.createElement('div');
-        spinnerSection.className = 'section-content';
+        spinnerSection.style.cssText =
+            'width: 100%; display: flex; justify-content: center; padding: 20px;';
         spinnerSection.innerHTML =
-            '<div class="spinner spinner-default"></div>';
+            '<span class="spinner spinner-default"></span>';
         gridContainer.appendChild(spinnerSection);
 
         const [settings, userId] = await Promise.all([
@@ -453,9 +482,8 @@ async function renderRecentServers(section) {
         const history = result.rovalra_server_history || {};
         const gameHistory = history[placeId] || [];
 
-        spinnerSection.remove();
-
         if (gameHistory.length === 0) {
+            spinnerSection.remove();
             const noServers = document.createElement('div');
             noServers.className =
                 'section-content-off empty-game-instances-container';
@@ -472,6 +500,8 @@ async function renderRecentServers(section) {
                 activeServers.push(serverData);
             }
         }
+
+        spinnerSection.remove();
 
         if (activeServers.length === 0) {
             const noActive = document.createElement('div');

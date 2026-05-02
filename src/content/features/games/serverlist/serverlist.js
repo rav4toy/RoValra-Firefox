@@ -23,7 +23,6 @@ import {
     displayPrivateServerStatus,
     displayInactivePlaceStatus,
     isExcludedButton,
-    createUUID,
     getFullLocationName,
     fetchAndDisplayRegion,
     addCopyJoinLinkButton,
@@ -32,6 +31,8 @@ import {
     getOrCreateDetailsContainer,
     createInfoElement,
 } from '../../../core/games/servers/serverdetails.js';
+import { createUUID } from '../../../core/apis/serverApi.js';
+import { addModernPrivateServerControls } from '../privateserver.js';
 
 const SHARED_STYLES = `
     #rovalra-main-controls {
@@ -61,11 +62,7 @@ const SHARED_STYLES = `
 
     body.rovalra-filter-active .rbx-public-running-games-footer { display: none !important; }
 
-    .rovalra-modern-container {
-        max-width: 900px !important;
-        margin-left: auto !important;
-        margin-right: auto !important;
-    }
+
 
     .rovalra-modern-ui .flex.flex-col.min-width-0 {
         display: flex !important;
@@ -125,6 +122,24 @@ const SHARED_STYLES = `
         margin-top: 4px !important;
     }
 
+    .rovalra-modern-ui .rovalra-private-server-status,
+    .rovalra-modern-ui .rovalra-owner-status {
+        font-size: 12px !important;
+        font-weight: 500 !important;
+        padding: 2px 6px !important;
+        border-radius: 4px !important;
+        margin-right: 8px !important;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .rovalra-modern-ui .rovalra-private-server-status {
+        background-color: var(--rovalra-accent-color);
+        color: var(--rovalra-main-text-color);
+        order: 6 !important;
+    }
+
     .rovalra-modern-ui .rovalra-server-extra-details,
     .rovalra-modern-ui .server-id-text {
         display: block !important;
@@ -146,6 +161,16 @@ const SHARED_STYLES = `
     }
     .rovalra-modern-ui .rovalra-copy-join-link {
         display: none !important;
+    }
+
+    [data-rovalra-join-button="true"] {
+        min-width: 200px !important;
+    }
+
+    .rovalra-modern-ui .rovalra-owner-status {
+        background-color: var(--rovalra-success-color);
+        color: var(--rovalra-main-text-color);
+        order: 7 !important;
     }
 
     .rovalra-modern-ui .rovalra-region-stats-bar {
@@ -648,6 +673,13 @@ function startController() {
 
             if (section.dataset.rovalraSectionType === 'public') {
                 if (
+                    document.getElementById(
+                        'rbx-public-game-server-item-container',
+                    )
+                )
+                    return;
+
+                if (
                     header &&
                     h3 &&
                     !header.querySelector('#rovalra-main-controls')
@@ -718,6 +750,7 @@ async function getReactServerId(element) {
                     privateServerId,
                     accessCode,
                     isFriendServer,
+                    isOwner,
                 } = event.detail;
 
                 if (serverId)
@@ -734,6 +767,9 @@ async function getReactServerId(element) {
                         'data-rovalra-is-friend-server',
                         'true',
                     );
+                }
+                if (isOwner) {
+                    element.setAttribute('data-rovalra-is-owner', 'true');
                 }
 
                 resolve(event.detail);
@@ -762,9 +798,16 @@ function addModernShareButton(el) {
     if (!btnContainer || btnContainer.querySelector('.rovalra-share-btn'))
         return;
 
+    const nativeJoinBtn = btnContainer.querySelector('button');
+    if (nativeJoinBtn) {
+        nativeJoinBtn.setAttribute('data-rovalra-join-button', 'true');
+    }
+
     const serverId = el.getAttribute('data-rovalra-serverid');
+    const privateServerId = el.getAttribute('data-private-server-id');
     const placeId = getPlaceIdFromUrl();
-    if (!serverId || !placeId) return;
+
+    if (!placeId || !serverId || privateServerId) return;
 
     btnContainer.className =
         'flex flex-col items-center gap-xsmall grow-0 shrink-0 basis-auto';
@@ -782,9 +825,12 @@ function addModernShareButton(el) {
     `);
 
     const shareBtn = shareBtnWrapper.querySelector('button');
-    shareBtn.onclick = (e) => {
+    shareBtn.onclick = async (e) => {
         e.stopPropagation();
         const joinLink = `https://www.roblox.com/games/start?placeId=${placeId}&gameInstanceId=${serverId}`;
+
+        if (!joinLink) return;
+
         navigator.clipboard.writeText(joinLink).then(async () => {
             const span = shareBtn.querySelector('.text-no-wrap');
             const originalText = span.textContent;
@@ -813,7 +859,11 @@ function initializeEnhancementObserver() {
     observeElement(
         serverSelector,
         async (el) => {
-            if (!el.hasAttribute('data-rovalra-serverid')) {
+            const hasId = el.hasAttribute('data-rovalra-serverid');
+            const hasAccess = el.hasAttribute('data-access-code');
+            const hasPrivateId = el.hasAttribute('data-private-server-id');
+
+            if (!hasId && !hasAccess && !hasPrivateId) {
                 await getReactServerId(el);
             }
 
@@ -933,7 +983,9 @@ try {
 
 export async function createServerCardFromRobloxApi(server, placeId) {
     try {
-        const isModern = !!document.querySelector('.rovalra-modern-ui');
+        const isModern =
+            !document.getElementById('rbx-public-game-server-item-container') &&
+            !!document.querySelector('.rovalra-modern-ui');
         if (isModern) return createModernServerCard(server, placeId);
 
         const listItemClass =
@@ -1011,7 +1063,9 @@ export async function createServerCardFromRobloxApi(server, placeId) {
 
 export async function createServerCardFromApi(server, placeId = '') {
     try {
-        const isModern = !!document.querySelector('.rovalra-modern-ui');
+        const isModern =
+            !document.getElementById('rbx-public-game-server-item-container') &&
+            !!document.querySelector('.rovalra-modern-ui');
         if (isModern) return createModernServerCard(server, placeId);
 
         const listItemClass =
@@ -1396,7 +1450,7 @@ async function createModernServerCard(server, placeId) {
         </div>
         <div class="flex flex-col items-center gap-xsmall grow-0 shrink-0 basis-auto">
             <div class="width-[63px] large:width-[200px]">
-                <button type="button" class="foundation-web-button relative clip group/interactable focus-visible:outline-focus disabled:outline-none cursor-pointer relative flex items-center justify-center stroke-none padding-y-none select-none radius-medium text-label-small height-800 padding-x-small bg-action-standard content-action-standard width-full rovalra-join-btn">
+                <button type="button" class="foundation-web-button relative clip group/interactable focus-visible:outline-focus disabled:outline-none cursor-pointer relative flex items-center justify-center stroke-none padding-y-none select-none radius-medium text-label-small height-800 padding-x-small bg-action-standard content-action-standard width-full rovalra-join-btn" data-rovalra-join-button="true">
                     <div role="presentation" class="absolute inset-[0] transition-colors group-hover/interactable:bg-[var(--color-state-hover)] group-active/interactable:bg-[var(--color-state-press)] group-disabled/interactable:bg-none"></div>
                     <span class="flex items-center min-width-0 gap-xsmall">
                         <span class="padding-y-xsmall text-truncate-end text-no-wrap">${ts('serverList.join')}</span>

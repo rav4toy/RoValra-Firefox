@@ -241,7 +241,8 @@
             "info": "Info",
             "credits": "Credits",
             "donatorPerks": "Donator Perks",
-            "settings": "Settings"
+            "settings": "Settings",
+            "accountStanding": "Account Standing"
         },
         "info": {
             "title": "RoValra Information!",
@@ -364,8 +365,8 @@
         "privateServers": "Private Servers"
     },
     "privateServerPage": {
-        "regenerateLink": "Regenerate Link",
-        "regenerated": "Regenerated!"
+        "regenerateLink": "Generate Link",
+        "regenerated": "Generated!"
     },
     "devProducts": {
         "noProducts": "No developer products found.",
@@ -428,7 +429,8 @@
         "secondsAgo": "{{count}}s ago",
         "minutesAgo": "{{count}}m ago",
         "hoursAgo": "{{count}}h ago",
-        "daysAgo": "{{count}}d ago"
+        "daysAgo": "{{count}}d ago",
+        "description": "Recent Servers you were just in."
     },
     "quickOutfits": {
         "errorFetching": "Error fetching outfits",
@@ -751,5 +753,10 @@
     },
     "groups": {
         "createdLabel": "Created"
+    },
+    "profile": {
+        "currencyTransfer": "Send Robux",
+        "currencyTransferConfirmation": "This will open the Roblox client allowing you to send robux.",
+        "openClient": "Open Client"
     }
 }

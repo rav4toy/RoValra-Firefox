@@ -11,6 +11,7 @@ import { addTooltip } from '../../core/ui/tooltip.js';
 import { RISK_COLORS } from '../../core/trade/riskCalculator.js';
 
 let featureSettings = { itemTradingEnabled: true, tradeRiskEnabled: true };
+let isInitialized = false;
 
 function createRow(label, contentHtml) {
     const row = document.createElement('div');
@@ -184,10 +185,13 @@ export function init() {
             featureSettings = settings;
             if (!settings.itemTradingEnabled) return;
 
-            const assetId = getPlaceIdFromUrl();
-            if (!assetId) return;
+            if (isInitialized) return;
+            isInitialized = true;
 
             const handleUpdate = () => {
+                const assetId = getPlaceIdFromUrl();
+                if (!assetId) return;
+
                 const priceRow = document.querySelector(
                     '#item-details .price-row-container',
                 );
@@ -203,7 +207,9 @@ export function init() {
             };
 
             document.addEventListener('rovalra-rolimons-data-update', (e) => {
+                const assetId = getPlaceIdFromUrl();
                 if (
+                    assetId &&
                     Array.isArray(e.detail) &&
                     e.detail.includes(String(assetId))
                 ) {
@@ -212,7 +218,9 @@ export function init() {
             });
 
             document.addEventListener('rovalra-risk-data-update', (e) => {
+                const assetId = getPlaceIdFromUrl();
                 if (
+                    assetId &&
                     Array.isArray(e.detail) &&
                     e.detail.includes(String(assetId))
                 ) {
@@ -223,8 +231,12 @@ export function init() {
             observeElement(
                 '#item-details .price-row-container',
                 (priceRow) => {
-                    if (priceRow.dataset.rovalraTradingProcessed) return;
-                    priceRow.dataset.rovalraTradingProcessed = 'true';
+                    const assetId = getPlaceIdFromUrl();
+                    if (!assetId) return;
+
+                    if (priceRow.dataset.rovalraTradingProcessed === assetId)
+                        return;
+                    priceRow.dataset.rovalraTradingProcessed = assetId;
 
                     const parent = priceRow.parentNode;
 
@@ -246,6 +258,9 @@ export function init() {
             );
 
             observeElement('.item-details-name-row h1', (header) => {
+                const assetId = getPlaceIdFromUrl();
+                if (!assetId) return;
+
                 updateItemName(header, assetId);
                 const rolimonsData = getCachedRolimonsItem(assetId);
                 if (!rolimonsData) {

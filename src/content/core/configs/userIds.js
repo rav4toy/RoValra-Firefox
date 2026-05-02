@@ -13,6 +13,7 @@ export const CONTRIBUTOR_USER_IDS = [
     '587159802', //zoinbase
     '193520242', //tigodev1
     '2615068449', //lolct
+    '10646979010', //rav4
 ];
 
 export const TESTER_USER_IDS = [

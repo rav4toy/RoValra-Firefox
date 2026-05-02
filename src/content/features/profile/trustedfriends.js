@@ -5,6 +5,10 @@ import { addTooltip } from '../../core/ui/tooltip.js';
 import { showConfirmationPrompt } from '../../core/ui/confirmationPrompt.js';
 import { showSystemAlert } from '../../core/ui/roblox/alert.js';
 import { t } from '../../core/locale/i18n.js';
+import {
+    registerProfileContextMenuAction,
+    createContextMenuButton,
+} from '../../core/ui/profile/contextMenu.js';
 
 const profileStatusCache = new Map();
 const TEST_ALWAYS_ERROR = false;
@@ -64,40 +68,12 @@ async function getProfileStatus(userId) {
     return statusPromise;
 }
 
-function createBaseButton(text, isPending = false) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.role = 'menuitem';
-    button.className = `relative clip group/interactable focus-visible:outline-focus foundation-web-menu-item flex items-center content-default text-truncate-split focus-visible:hover:outline-none stroke-none bg-none text-align-x-left width-full text-body-medium padding-x-medium padding-y-small gap-x-medium radius-medium rovalra-trusted-friend-btn ${isPending ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`;
-
-    if (isPending) {
-        button.setAttribute('aria-disabled', 'true');
-    }
-
-    const presentationDiv = document.createElement('div');
-    presentationDiv.setAttribute('role', 'presentation');
-    presentationDiv.className =
-        'absolute inset-[0] transition-colors group-hover/interactable:bg-[var(--color-state-hover)] group-active/interactable:bg-[var(--color-state-press)]';
-
-    const textDiv = document.createElement('div');
-    textDiv.className = 'grow-1 text-truncate-split flex flex-col gap-y-xsmall';
-
-    const titleSpan = document.createElement('span');
-    titleSpan.className =
-        'foundation-web-menu-item-title text-no-wrap text-truncate-split content-emphasis';
-    titleSpan.textContent = text;
-
-    textDiv.appendChild(titleSpan);
-    button.append(presentationDiv, textDiv);
-
-    return { button, titleSpan };
-}
-
 async function createPendingButton() {
-    const { button } = createBaseButton(
+    const { button } = createContextMenuButton(
         await t('trustedFriends.pendingConnection'),
         true,
     );
+    button.classList.add('rovalra-trusted-friend-btn');
     button.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -109,9 +85,10 @@ async function createPendingButton() {
 }
 
 async function createAddButton(userId) {
-    const { button, titleSpan } = createBaseButton(
+    const { button, titleSpan } = createContextMenuButton(
         await t('trustedFriends.addConnection'),
     );
+    button.classList.add('rovalra-trusted-friend-btn');
     button.addEventListener('click', async () => {
         showConfirmationPrompt({
             title: await t('trustedFriends.addConnection'),
@@ -165,9 +142,10 @@ async function createAddButton(userId) {
 }
 
 async function createAcceptButton(userId) {
-    const { button, titleSpan } = createBaseButton(
+    const { button, titleSpan } = createContextMenuButton(
         await t('trustedFriends.acceptConnection'),
     );
+    button.classList.add('rovalra-trusted-friend-btn');
     button.addEventListener('click', async () => {
         showConfirmationPrompt({
             title: await t('trustedFriends.acceptConnection'),
@@ -221,9 +199,10 @@ async function createAcceptButton(userId) {
 }
 
 async function createRemoveButton(userId) {
-    const { button, titleSpan } = createBaseButton(
+    const { button, titleSpan } = createContextMenuButton(
         await t('trustedFriends.removeConnection'),
     );
+    button.classList.add('rovalra-trusted-friend-btn');
     button.addEventListener('click', async () => {
         showConfirmationPrompt({
             title: await t('trustedFriends.removeConnection'),
@@ -336,30 +315,12 @@ export function init() {
         async (settings) => {
             if (!settings.trustedConnectionsEnabled) return;
 
-            observeElement(
-                '#user-profile-header-contextual-menu-button',
-                (button) => {
-                    const userId = getUserIdFromUrl();
-                    if (userId) {
-                        getProfileStatus(userId);
-                    }
-
-                    if (button.dataset.rovalraTrustedListener) {
-                        return;
-                    }
-                    button.dataset.rovalraTrustedListener = 'true';
-
-                    button.addEventListener('click', () => {
-                        observeElement(
-                            'div[data-radix-popper-content-wrapper] div[role="menu"]',
-                            (menu) => {
-                                addTrustedFriendButton(menu);
-                            },
-                            { once: true },
-                        );
-                    });
-                },
-            );
+            registerProfileContextMenuAction(addTrustedFriendButton, () => {
+                const userId = getUserIdFromUrl();
+                if (userId) {
+                    getProfileStatus(userId);
+                }
+            });
         },
     );
 }

@@ -332,8 +332,9 @@ const UI = {
 };
 
 class HiddenGamesManager {
-    constructor(allGames) {
-        this.allGames = allGames;
+    constructor(userId) {
+        this.userId = userId;
+        this.allGames = [];
         this.cache = sharedStatsCache;
         this.filters = { sort: 'default', order: 'desc' };
         this.processedGames = [];
@@ -345,20 +346,21 @@ class HiddenGamesManager {
     async openOverlay() {
         const body = document.createElement('div');
 
-        const filterPanel = await UI.createFilterPanel(
-            this.handleFilterChange.bind(this),
-        );
-
         const list = document.createElement('div');
         list.className = 'hidden-games-list';
         list.classList.add('rovalra-hidden-games-list');
+        list.appendChild(
+            createShimmerGrid(12, { width: '150px', height: '240px' }),
+        );
 
         const loader = document.createElement('div');
         loader.className = 'rovalra-load-more-container';
+        loader.classList.add('hidden-games-list', 'rovalra-hidden-games-list');
+        loader.style.paddingTop = '0';
 
-        body.append(filterPanel, list, loader);
+        body.append(list, loader);
 
-        this.elements = { list, loader, filterPanel };
+        this.elements = { list, loader };
 
         const { overlay } = createOverlay({
             title: await t('hiddenGamesProfile.overlayText'),
@@ -367,11 +369,18 @@ class HiddenGamesManager {
             maxHeight: '85vh',
         });
 
-        if (this.allGames.length === 0) {
+        this.allGames = await Api.getUserGames(this.userId);
+
+        if (!this.allGames || this.allGames.length === 0) {
             this.elements.list.innerHTML = `<p class="no-hidden-games-message">${await t('hiddenGamesProfile.noHiddenGames')}</p>`; // Verified
-            this.elements.filterPanel.style.display = 'none';
             return;
         }
+
+        const filterPanel = await UI.createFilterPanel(
+            this.handleFilterChange.bind(this),
+        );
+        body.prepend(filterPanel);
+        this.elements.filterPanel = filterPanel;
 
         const scrollContainer = overlay.querySelector('.rovalra-overlay-body');
         if (scrollContainer) {
@@ -403,7 +412,7 @@ class HiddenGamesManager {
         this.visibleCount = 0;
 
         if (
-            ['default', 'like-ratio', 'likes', 'dislikes', 'players'].includes(
+            ['like-ratio', 'likes', 'dislikes', 'players'].includes(
                 this.filters.sort,
             )
         ) {
@@ -477,7 +486,9 @@ class HiddenGamesManager {
         )
             return;
 
-        this.elements.loader.innerHTML = `<p class="rovalra-loading-text">${await t('hiddenGamesProfile.loading')}</p>`;
+        this.elements.loader.appendChild(
+            createShimmerGrid(12, { width: '150px', height: '240px' }),
+        );
 
         try {
             const nextBatch = this.processedGames.slice(
@@ -515,11 +526,10 @@ export function init() {
         if (isInitialized) return;
         isInitialized = true;
 
-        const handleButtonClick = async () => {
+        const handleButtonClick = () => {
             const userId = getUserId();
             if (!userId) return;
-            const games = await Api.getUserGames(userId);
-            await new HiddenGamesManager(games).openOverlay();
+            new HiddenGamesManager(userId).openOverlay();
         };
 
         observeElement(
