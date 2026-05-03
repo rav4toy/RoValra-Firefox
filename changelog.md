@@ -1,14 +1,25 @@
-\## 2.4.15.2 Firefox 02/05/2026
+2.4.15.3 Firefox 04/05/2026
 
 &#x20; # Fixes :
 
-* Actually fixed Updates tab now.
+* Actually fixed the Updates tab being blank.
+* Fixed Instant Join also being blank.
+* Fixed Gifs in satuts not appearing because of CSP restrictions.
+
+
+
+2.4.15.2 Firefox 25/04/2026
+
+&#x20; # Changes :
+
+* Updated some more stuff related to RoValra
+* Fixed Updates showing sometimes as a blank tab
 
 
 
 
 
-\## 2.4.15.1 Firefox 23/04/2026
+2.4.15.1 Firefox 23/04/2026
 
 &#x20; # Fixes :
 
@@ -24,8 +35,9 @@
 
 &#x20; # Fixes :
 
-* Fixed some labels not showing correctly.
-* Fixed RoValra not joining the closest server after a bit of searching.
+Fixed some labels not showing correctly.
+
+Fixed RoValra not joining the closest server after a bit of searching.
 
 
 

@@ -1,3 +1,67 @@
+
+function rovalraNeedsImageProxy(url) {
+  try { return typeof url === "string" && /^https:\/\/www\.rovalra\.com\/static\/img\//i.test(url.trim()); } catch { return false; }
+}
+const rovalraImageProxyCache = new Map();
+async function rovalraProxyImageUrl(url) {
+  if (!rovalraNeedsImageProxy(url)) return url;
+  if (rovalraImageProxyCache.has(url)) return rovalraImageProxyCache.get(url);
+  const promise = rovalraFetchAssetAsDataUrl(url).catch(() => url);
+  rovalraImageProxyCache.set(url, promise);
+  return promise;
+}
+function rovalraRewriteInlineImageStyle(el) {
+  if (!el?.getAttribute) return;
+  const style = el.getAttribute("style");
+  if (!style?.includes("www.rovalra.com/static/img/")) return;
+  const urls = [...style.matchAll(/url\((["']?)(https:\/\/www\.rovalra\.com\/static\/img\/[^)'"\s]+)\1\)/gi)].map((m) => m[2]);
+  if (!urls.length) return;
+  Promise.all(urls.map((url) => rovalraProxyImageUrl(url).then((proxied) => [url, proxied]))).then((pairs) => {
+    let next = el.getAttribute("style") || "";
+    for (const [url, proxied] of pairs) next = next.split(url).join(proxied);
+    el.setAttribute("style", next);
+  });
+}
+function rovalraRewriteRovalraImages(root = document) {
+  try {
+    const nodes = [];
+    if (root?.nodeType === 1) nodes.push(root);
+    if (root?.querySelectorAll) nodes.push(...root.querySelectorAll("img, source, [style]"));
+    for (const el of nodes) {
+      if (el.tagName === "IMG" || el.tagName === "SOURCE") {
+        const src = el.getAttribute("src");
+        if (rovalraNeedsImageProxy(src)) rovalraProxyImageUrl(src).then((proxied) => proxied && proxied !== src && el.setAttribute("src", proxied));
+        const srcset = el.getAttribute("srcset");
+        if (srcset?.includes("www.rovalra.com/static/img/")) {
+          const entries = srcset.split(",").map((part) => part.trim()).filter(Boolean);
+          Promise.all(entries.map(async (entry) => {
+            const pieces = entry.split(/\s+/);
+            const url = pieces.shift();
+            const proxied = await rovalraProxyImageUrl(url);
+            return [proxied, ...pieces].join(" ");
+          })).then((rewritten) => el.setAttribute("srcset", rewritten.join(", ")));
+        }
+      }
+      rovalraRewriteInlineImageStyle(el);
+    }
+  } catch {}
+}
+function rovalraInstallImageCspFix() {
+  rovalraRewriteRovalraImages(document);
+  try {
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (mutation.type === "attributes") rovalraRewriteRovalraImages(mutation.target);
+        for (const node of mutation.addedNodes || []) rovalraRewriteRovalraImages(node);
+      }
+    });
+    observer.observe(document.documentElement || document, { childList: true, subtree: true, attributes: true, attributeFilter: ["src", "srcset", "style"] });
+  } catch {}
+  setTimeout(() => rovalraRewriteRovalraImages(document), 500);
+  setTimeout(() => rovalraRewriteRovalraImages(document), 1500);
+  setTimeout(() => rovalraRewriteRovalraImages(document), 3500);
+}
+
 /*!
  * rovalra v2.4.15.1
  * License: GPL-3.0
@@ -71359,3 +71423,19 @@ e:${localEnvId}` : `e:${localEnvId}`), newDescription !== currentDescription && 
   initializePage();
   setupUrlChangeListeners();
 })();
+
+try { rovalraInstallImageCspFix(); } catch {}
+
+
+function rovalraRepairInstantJoinLabel() {
+  document.querySelectorAll("#rovalra-instant-join-button").forEach((btn) => {
+    let span = btn.querySelector("span");
+    if (!span) {
+      span = document.createElement("span");
+      span.className = "padding-y-xsmall padding-x-xsmall text-no-wrap";
+      btn.appendChild(span);
+    }
+    if (!span.textContent || !span.textContent.trim() || span.textContent === "undefined") span.textContent = "Instant Join";
+  });
+}
+
