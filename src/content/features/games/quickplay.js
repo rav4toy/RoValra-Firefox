@@ -129,6 +129,132 @@ const paidPriceCache = new Map();
 const paidPriceQueue = new Map();
 let paidPriceTimer = null;
 
+const paidPlayabilityCache = new Map();
+const paidPlayabilityQueue = new Map();
+let paidPlayabilityTimer = null;
+let paidPlayabilityInFlight = false;
+
+function shouldHidePaidPriceForPlayability(statusData) {
+    if (!statusData) return false;
+
+    const status = String(statusData.playabilityStatus || '').toLowerCase();
+    if (status === 'playable' || statusData.isPlayable === true) return true;
+
+    return false;
+}
+
+function getPaidPriceKey(placeId) {
+    return String(placeId || '');
+}
+
+function getPaidPlayabilityKey(universeId) {
+    return String(universeId || '');
+}
+
+function queuePaidPlayabilityCheck(universeId, onResolved) {
+    const key = getPaidPlayabilityKey(universeId);
+    if (!key) {
+        onResolved(false);
+        return;
+    }
+
+    if (paidPlayabilityCache.has(key)) {
+        onResolved(paidPlayabilityCache.get(key));
+        return;
+    }
+
+    if (!paidPlayabilityQueue.has(key)) {
+        paidPlayabilityQueue.set(key, []);
+    }
+    paidPlayabilityQueue.get(key).push(onResolved);
+
+    if (!paidPlayabilityTimer) {
+        paidPlayabilityTimer = setTimeout(flushPaidPlayabilityQueue, 900);
+    }
+}
+
+function resolvePaidPlayabilityCallbacks(universeId, hideBadge) {
+    const key = getPaidPlayabilityKey(universeId);
+    paidPlayabilityCache.set(key, !!hideBadge);
+
+    const callbacks = paidPlayabilityQueue.get(key) || [];
+    paidPlayabilityQueue.delete(key);
+    callbacks.forEach((callback) => {
+        try {
+            callback(!!hideBadge);
+        } catch (e) {
+            console.warn('RoValra: Failed to resolve paid access status', e);
+        }
+    });
+}
+
+async function flushPaidPlayabilityQueue() {
+    if (paidPlayabilityInFlight) {
+        if (!paidPlayabilityTimer) {
+            paidPlayabilityTimer = setTimeout(flushPaidPlayabilityQueue, 1200);
+        }
+        return;
+    }
+
+    const universeIds = Array.from(paidPlayabilityQueue.keys()).filter(
+        (id) => !paidPlayabilityCache.has(id),
+    );
+
+    paidPlayabilityTimer = null;
+    if (!universeIds.length) return;
+
+    const chunk = universeIds.slice(0, 3);
+    paidPlayabilityInFlight = true;
+
+    try {
+        const playabilityEndpoint = `/v1/games/multiget-playability-status?${chunk
+            .map((id) => `universeIds=${encodeURIComponent(id)}`)
+            .join('&')}`;
+        const playabilityRes = await callRobloxApi({
+            subdomain: 'games',
+            endpoint: playabilityEndpoint,
+            method: 'GET',
+        });
+
+        if (!playabilityRes.ok) {
+            throw new Error(`playability status ${playabilityRes.status}`);
+        }
+
+        const playabilityData = await playabilityRes.json();
+        const returned = new Set();
+
+        if (Array.isArray(playabilityData)) {
+            for (const statusData of playabilityData) {
+                const universeId = getPaidPlayabilityKey(
+                    statusData?.universeId ?? statusData?.UniverseId,
+                );
+                if (!universeId) continue;
+
+                returned.add(universeId);
+                resolvePaidPlayabilityCallbacks(
+                    universeId,
+                    shouldHidePaidPriceForPlayability(statusData),
+                );
+            }
+        }
+
+        chunk.forEach((universeId) => {
+            if (!returned.has(universeId)) {
+                resolvePaidPlayabilityCallbacks(universeId, false);
+            }
+        });
+    } catch (e) {
+        // Do not show the badge when ownership/playability could not be checked yet.
+        // This avoids briefly showing prices for paid games the user already owns.
+        console.warn('RoValra: Delaying paid access badge ownership check', e);
+    } finally {
+        paidPlayabilityInFlight = false;
+        if (paidPlayabilityQueue.size) {
+            paidPlayabilityTimer = setTimeout(flushPaidPlayabilityQueue, 1800);
+        }
+    }
+}
+
 function getPaidPriceStore() {
     if (
         !window.__rovalraPaidAccessPrices ||
@@ -270,6 +396,14 @@ function addPaidPriceBadge(gameLink, price) {
     placePaidPriceBadge(gameLink, badge, nameEl);
 }
 
+function removePaidPriceBadge(gameLink) {
+    if (!gameLink) return;
+
+    gameLink
+        .querySelectorAll?.(`.${PAID_PRICE_BADGE_CLASS}`)
+        .forEach((badge) => badge.remove());
+}
+
 async function fetchPaidPriceChunk(placeIds) {
     const endpoint = `/v1/games/multiget-place-details?${placeIds
         .map((id) => `placeIds=${encodeURIComponent(id)}`)
@@ -283,15 +417,16 @@ async function fetchPaidPriceChunk(placeIds) {
     const placeData = placeRes.ok ? await placeRes.json() : [];
 
     const prices = new Map();
-    const universeToPlaceIds = new Map();
+    const placeToUniverse = new Map();
+    const placePlayable = new Map();
 
     if (Array.isArray(placeData)) {
         for (const item of placeData) {
-            const itemPlaceId = String(
-                item?.placeId ?? item?.PlaceId ?? item?.id ?? '',
+            const itemPlaceId = getPaidPriceKey(
+                item?.placeId ?? item?.PlaceId ?? item?.id,
             );
-            const universeId = String(
-                item?.universeId ?? item?.UniverseId ?? '',
+            const universeId = getPaidPlayabilityKey(
+                item?.universeId ?? item?.UniverseId,
             );
             const price = Number(
                 item?.price ??
@@ -300,18 +435,28 @@ async function fetchPaidPriceChunk(placeIds) {
                     item?.priceInRobux ??
                     0,
             );
+            const hasDirectPlayableState =
+                typeof item?.isPlayable === 'boolean' ||
+                typeof item?.IsPlayable === 'boolean' ||
+                item?.playabilityStatus != null ||
+                item?.PlayabilityStatus != null;
+            const directPlayable =
+                item?.isPlayable === true ||
+                item?.IsPlayable === true ||
+                String(item?.playabilityStatus ?? item?.PlayabilityStatus ?? '')
+                    .toLowerCase() === 'playable';
 
             if (itemPlaceId) prices.set(itemPlaceId, price);
-            if (itemPlaceId && universeId) {
-                if (!universeToPlaceIds.has(universeId)) {
-                    universeToPlaceIds.set(universeId, []);
-                }
-                universeToPlaceIds.get(universeId).push(itemPlaceId);
+            if (itemPlaceId && hasDirectPlayableState) {
+                placePlayable.set(itemPlaceId, directPlayable);
+            }
+            if (itemPlaceId && universeId && price > 0) {
+                placeToUniverse.set(itemPlaceId, universeId);
             }
         }
     }
 
-    return prices;
+    return { prices, placeToUniverse, placePlayable };
 }
 
 function flushPaidPriceQueue() {
@@ -332,22 +477,76 @@ function flushPaidPriceQueue() {
     const placeIds = unresolved.map(([placeId]) => placeId).filter(Boolean);
     if (!placeIds.length) return;
 
-    for (let i = 0; i < placeIds.length; i += 6) {
-        const chunk = placeIds.slice(i, i + 6);
+    for (let i = 0; i < placeIds.length; i += 50) {
+        const chunk = placeIds.slice(i, i + 50);
         fetchPaidPriceChunk(chunk)
-            .then((prices) => {
+            .then(({ prices, placeToUniverse, placePlayable }) => {
                 for (const placeId of chunk) {
-                    const price = prices.get(String(placeId)) || 0;
-                    paidPriceCache.set(placeId, price);
-                    getPaidPriceStore().set(String(placeId), price);
+                    const key = getPaidPriceKey(placeId);
+                    const price = prices.get(key) || 0;
+                    const universeId = placeToUniverse.get(key);
+                    const directPlayable = placePlayable.get(key);
                     const links = unresolvedLinks.get(placeId) || [];
-                    links.forEach((link) => addPaidPriceBadge(link, price));
+
+                    if (!price) {
+                        paidPriceCache.set(placeId, 0);
+                        getPaidPriceStore().set(key, 0);
+                        continue;
+                    }
+
+                    const showBadge = () => {
+                        paidPriceCache.set(placeId, price);
+                        getPaidPriceStore().set(key, price);
+                        links.forEach((link) => addPaidPriceBadge(link, price));
+                    };
+
+                    if (directPlayable === true) {
+                        paidPriceCache.set(placeId, 0);
+                        getPaidPriceStore().set(key, 0);
+                        links.forEach((link) => removePaidPriceBadge(link));
+                        continue;
+                    }
+
+                    if (directPlayable === false || !universeId) {
+                        showBadge();
+                        continue;
+                    }
+
+                    let playabilityResolved = false;
+                    const fallbackTimer = setTimeout(() => {
+                        if (playabilityResolved) return;
+
+                        // If Roblox rate-limits the owned/playability check, still show the
+                        // price badge instead of hiding all paid prices forever. If the
+                        // delayed check later proves the user owns/can play it, the badge
+                        // is removed below.
+                        showBadge();
+                    }, 1400);
+
+                    queuePaidPlayabilityCheck(universeId, (hideBadge) => {
+                        playabilityResolved = true;
+                        clearTimeout(fallbackTimer);
+
+                        const finalPrice = hideBadge ? 0 : price;
+                        paidPriceCache.set(placeId, finalPrice);
+                        getPaidPriceStore().set(key, finalPrice);
+
+                        if (hideBadge) {
+                            links.forEach((link) => removePaidPriceBadge(link));
+                            return;
+                        }
+
+                        links.forEach((link) =>
+                            addPaidPriceBadge(link, price),
+                        );
+                    });
                 }
             })
             .catch(() => {
                 chunk.forEach((placeId) => {
+                    const key = getPaidPriceKey(placeId);
                     paidPriceCache.set(placeId, 0);
-                    getPaidPriceStore().set(String(placeId), 0);
+                    getPaidPriceStore().set(key, 0);
                 });
             });
     }
