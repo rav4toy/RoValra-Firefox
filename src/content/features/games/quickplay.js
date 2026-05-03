@@ -145,15 +145,29 @@ function injectPaidPriceBadgeStyles() {
     const style = document.createElement('style');
     style.id = 'rovalra-paid-price-badge-styles';
     style.textContent = `
+        .rovalra-paid-access-price-title-row {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            min-width: 0;
+            width: 100%;
+        }
+        .rovalra-paid-access-price-title-row > .game-card-name,
+        .rovalra-paid-access-price-title-row > .game-name-title {
+            flex: 1 1 auto;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
         .${PAID_PRICE_BADGE_CLASS} {
-            position: absolute;
-            z-index: 5;
-            right: 5px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            height: 17px;
-            padding: 0 6px;
+            flex: 0 0 auto;
+            height: 19px;
+            max-width: 68px;
+            padding: 0 7px;
             border-radius: 999px;
             background: #335fff;
             color: #fff;
@@ -161,8 +175,9 @@ function injectPaidPriceBadgeStyles() {
             font-weight: 700;
             line-height: 1;
             white-space: nowrap;
-            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
             pointer-events: none;
+            transform: translateY(-1px);
         }
     `;
     document.documentElement.appendChild(style);
@@ -217,13 +232,16 @@ function isLargeSearchCard(gameLink) {
 }
 
 function placePaidPriceBadge(gameLink, badge, nameEl) {
-    const linkRect = gameLink.getBoundingClientRect();
-    const nameRect = nameEl.getBoundingClientRect();
-    const top = nameRect.top - linkRect.top + (nameRect.height - 17) / 2;
+    let titleRow = nameEl.closest('.rovalra-paid-access-price-title-row');
 
-    gameLink.style.position = gameLink.style.position || 'relative';
-    nameEl.style.paddingRight = '72px';
-    badge.style.top = `${Math.max(0, Math.round(top))}px`;
+    if (!titleRow) {
+        titleRow = document.createElement('div');
+        titleRow.className = 'rovalra-paid-access-price-title-row';
+        nameEl.parentNode.insertBefore(titleRow, nameEl);
+        titleRow.appendChild(nameEl);
+    }
+
+    titleRow.appendChild(badge);
 }
 
 function addPaidPriceBadge(gameLink, price) {
@@ -249,14 +267,7 @@ function addPaidPriceBadge(gameLink, price) {
     badge.textContent = `${price.toLocaleString()} Robux`;
     badge.title = `Paid access: ${price.toLocaleString()} Robux`;
 
-    gameLink.appendChild(badge);
     placePaidPriceBadge(gameLink, badge, nameEl);
-
-    setTimeout(() => {
-        if (badge.isConnected && nameEl.isConnected) {
-            placePaidPriceBadge(gameLink, badge, nameEl);
-        }
-    }, 250);
 }
 
 async function fetchPaidPriceChunk(placeIds) {
@@ -1055,6 +1066,7 @@ function initializeQuickPlay() {
         {
             PreferredRegionEnabled: true,
             privateservers: true,
+            PaidAccessPriceBadgeEnabled: true,
             playbuttonpreferredregionenabled: true,
             robloxPreferredRegion: 'AUTO',
         },
@@ -1064,7 +1076,9 @@ function initializeQuickPlay() {
                 if (gameLink.closest('[data-testid="event-experience-link"]')) {
                     return;
                 }
-                setupPaidPriceBadge(gameLink);
+                if (settings.PaidAccessPriceBadgeEnabled) {
+                    setupPaidPriceBadge(gameLink);
+                }
 
                 if (gameLink.classList.contains(PROCESSED_MARKER_CLASS)) return;
                 gameLink.classList.add(PROCESSED_MARKER_CLASS);
