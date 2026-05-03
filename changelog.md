@@ -6,6 +6,10 @@
 * Fixed Instant Join also being blank.
 * Fixed Gifs in satuts not appearing because of CSP restrictions.
 
+&#x20; # Changes : 
+
+* Added support for Waterfox (and other 140 based browsers).
+
 
 
 2.4.15.2 Firefox 25/04/2026
