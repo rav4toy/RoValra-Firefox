@@ -1,7 +1,17 @@
-
-
 import { getAssets } from '../assets.js';
-import { CREATOR_USER_ID, CONTRIBUTOR_USER_IDS, RAT_BADGE_USER_ID, BLAHAJ_BADGE_USER_ID, CAM_BADGE_USER_ID } from './userIds.js';
+import {
+    CREATOR_USER_ID,
+    CONTRIBUTOR_USER_IDS,
+    RAT_BADGE_USER_ID,
+    BLAHAJ_BADGE_USER_ID,
+    CAM_BADGE_USER_ID,
+    alice_badge_user_id,
+    TESTER_USER_IDS,
+    ARTIST_USER_IDS,
+    TRANSLATOR_USER_IDS,
+    GILBERT_USER_ID,
+    Robux,
+} from './userIds.js';
 
 const assets = getAssets();
 
@@ -13,7 +23,8 @@ export const BADGE_CONFIG = {
         tooltip: 'Creator of RoValra',
         confetti: assets.rovalraIcon,
         style: {},
-        alwaysShow: true
+        alwaysShow: true,
+        shiny: true,
     },
     contributor: {
         type: 'header',
@@ -21,7 +32,41 @@ export const BADGE_CONFIG = {
         icon: assets.rovalraIcon,
         tooltip: 'RoValra Contributor',
         confetti: assets.rovalraIcon,
-        style: { filter: 'sepia(80%) saturate(300%) brightness(90%) hue-rotate(-20deg)' }
+        style: {
+            filter: 'sepia(80%) saturate(300%) brightness(90%) hue-rotate(-20deg)',
+        },
+        shiny: true,
+    },
+    translator: {
+        type: 'header',
+        userIds: TRANSLATOR_USER_IDS,
+        icon: assets.translateIcon,
+        tooltip: 'RoValra Translator',
+        confetti: assets.translateIcon,
+        style: {},
+        shiny: true,
+    },
+
+    tester: {
+        type: 'header',
+        userIds: TESTER_USER_IDS,
+        icon: assets.testerIcon,
+        tooltip: 'RoValra Lead Tester',
+        confetti: assets.testerIcon,
+        shiny: true,
+        style: {
+            filter: 'invert(76%) sepia(85%) saturate(1870%) hue-rotate(358deg) brightness(103%) contrast(106%)',
+        },
+        size: '28px',
+    },
+    artist: {
+        type: 'header',
+        userIds: ARTIST_USER_IDS,
+        icon: assets.artistIcon,
+        tooltip: 'RoValra Artist',
+        confetti: assets.artistIcon,
+        shiny: true,
+        size: '28px',
     },
     gilbert: {
         type: 'badge',
@@ -30,7 +75,15 @@ export const BADGE_CONFIG = {
         name: 'Gilbert',
         tooltip: 'Creator of RoValra',
         confetti: assets.rovalraIcon,
-        alwaysShow: true
+        alwaysShow: true,
+    },
+    gilbertmaker: {
+        type: 'badge',
+        userIds: [GILBERT_USER_ID],
+        icon: assets.rovalraIcon,
+        name: 'Gilbert',
+        tooltip: 'Maker of Fisch, where Gilbert comes from',
+        confetti: assets.rovalraIcon,
     },
     rat: {
         type: 'badge',
@@ -38,7 +91,7 @@ export const BADGE_CONFIG = {
         icon: assets.ratBadgeIcon,
         name: 'I make rats',
         tooltip: 'I make rats',
-        confetti: assets.fishConfetti
+        confetti: assets.fishConfetti,
     },
     blahaj: {
         type: 'badge',
@@ -46,7 +99,7 @@ export const BADGE_CONFIG = {
         icon: assets.blahaj,
         name: 'BLAHAJ :3',
         tooltip: 'BLAHAJ :3',
-        confetti: assets.blahaj
+        confetti: assets.blahaj,
     },
     cam: {
         type: 'header',
@@ -54,7 +107,7 @@ export const BADGE_CONFIG = {
         icon: assets.cam,
         name: 'kat >w<',
         tooltip: 'kat >w<',
-        confetti: assets.cam
+        confetti: assets.cam,
     },
     camEasterEgg: {
         type: 'badge',
@@ -62,38 +115,74 @@ export const BADGE_CONFIG = {
         icon: assets.cam,
         name: 'kat >w<',
         tooltip: 'kat >w<',
-        confetti: assets.cam
+        confetti: assets.cam,
+    },
+    alice: {
+        type: 'header',
+        userIds: [alice_badge_user_id],
+        icon: assets.alice,
+        name: 'silly goober',
+        tooltip: 'silly goober',
+        confetti: assets.alice,
+        size: '28px',
+    },
+    aliceegg: {
+        type: 'badge',
+        userIds: [alice_badge_user_id],
+        icon: assets.alice,
+        name: 'silly goober',
+        tooltip: 'silly goober',
+        confetti: assets.alice,
+    },
+    robux: {
+        type: 'header',
+        userIds: [Robux],
+        icon: assets.robux,
+        name: 'Robux Lover',
+        tooltip: 'Robux Lover',
+        confetti: assets.robux,
     },
     legacy_donator: {
         type: 'header',
         userIds: [],
         icon: assets.rovalraIcon,
-        tooltip: 'Legacy Donator. Earned by donating to RoValra before donator badges were a thing.',
+        tooltip:
+            'Legacy Donator. Earned by donating to RoValra before donator badges were a thing.',
         confetti: assets.rovalraIcon,
-        style: { filter: 'sepia(100%) saturate(600%) brightness(90%) hue-rotate(5deg)' }
+        style: {
+            filter: 'sepia(100%) saturate(600%) brightness(90%) hue-rotate(5deg)',
+        },
+        shiny: true,
     },
     donator_1: {
         type: 'header',
         userIds: [],
         icon: assets.rovalraIcon,
-        tooltip: 'Donated any amount of Robux to help Support RoValra\'s development.',
+        tooltip:
+            "Donated any amount of Robux to help Support RoValra's development.",
         url: 'https://www.roblox.com/games/store-section/9452973012',
-        style: { filter: 'sepia(1) saturate(1.8) hue-rotate(-35deg) brightness(0.8) contrast(1.2)' }
+        style: {
+            filter: 'sepia(1) saturate(1.8) hue-rotate(-35deg) brightness(0.8) contrast(1.2)',
+        },
     },
     donator_2: {
         type: 'header',
         userIds: [],
         icon: assets.rovalraIcon,
-        tooltip: 'Donated 200 or more Robux to help Support RoValra\'s development.',
+        tooltip:
+            "Donated 200 or more Robux to help Support RoValra's development.",
         url: 'https://www.roblox.com/games/store-section/9452973012',
-        style: { filter: 'grayscale(1) brightness(1.3) contrast(1.2)' }
+        style: { filter: 'grayscale(1) brightness(1.3) contrast(1.2)' },
     },
     donator_3: {
         type: 'header',
         userIds: [],
         icon: assets.rovalraIcon,
-        tooltip: 'Donated 500 or more Robux to help Support RoValra\'s development.',
+        tooltip:
+            "Donated 500 or more Robux to help Support RoValra's development.",
         url: 'https://www.roblox.com/games/store-section/9452973012',
-        style: { filter: 'sepia(1) saturate(3) hue-rotate(5deg) brightness(1.1)' }
-    }
+        style: {
+            filter: 'sepia(1) saturate(3) hue-rotate(5deg) brightness(1.1)',
+        },
+    },
 };

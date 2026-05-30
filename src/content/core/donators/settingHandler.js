@@ -1,0 +1,463 @@
+import { callRobloxApiJson } from '../api.js';
+import { getValidAccessToken } from '../oauth/oauth.js';
+import { getAuthenticatedUserId } from '../user.js';
+import { getCurrentUserTier } from '../settings/handlesettings.js';
+import {
+    TRUSTED_USER_IDS,
+    ARTIST_USER_IDS,
+    RAT_BADGE_USER_ID,
+    BLAHAJ_BADGE_USER_ID,
+    CAM_BADGE_USER_ID,
+    alice_badge_user_id,
+    GILBERT_USER_ID,
+} from '../configs/userIds.js';
+import * as cache from '../storage/cacheHandler.js';
+
+const BATCH_MAX_SIZE = 50;
+const BATCH_DELAY_MS = 10;
+let batchQueue = [];
+let batchTimeout = null;
+let batchInProgress = false;
+const memoryCache = new Map();
+const pendingResolvers = new Map();
+
+function assertValidUserId(userId) {
+    if (
+        userId === null ||
+        userId === undefined ||
+        String(userId).trim() === '' ||
+        String(userId).toLowerCase() === 'null'
+    ) {
+        throw new Error(
+            'RoValra: Cannot fetch user settings without a valid user ID.',
+        );
+    }
+}
+
+async function saveToCache(cacheKey, settings) {
+    const cacheData = {
+        data: settings,
+        timestamp: Date.now(),
+    };
+    memoryCache.set(cacheKey, cacheData);
+    await cache.set('user_settings', cacheKey, cacheData, 'local');
+}
+
+async function fetchAndProcessSettings(userId, options = {}) {
+    assertValidUserId(userId);
+
+    const authenticatedUserId = await getAuthenticatedUserId();
+    const isOwnProfile =
+        authenticatedUserId && String(authenticatedUserId) === String(userId);
+
+    let apiSettings = {};
+    let apiProvidedMeaningfulSettings = false;
+    try {
+        let data;
+        if (isOwnProfile) {
+            const token = await getValidAccessToken(false, false);
+            if (token) {
+                data = await callRobloxApiJson({
+                    isRovalraApi: true,
+                    subdomain: 'apis',
+                    endpoint: '/v1/auth/settings',
+                    method: 'GET',
+                    noCache: true,
+                });
+
+                if (data.status === 'success' && data.setting) {
+                    data.settings = {
+                        [data.setting.key]: data.setting.value,
+                    };
+                }
+            }
+        }
+
+        if (!data) {
+            data = await callRobloxApiJson({
+                isRovalraApi: true,
+                subdomain: 'apis',
+                endpoint: `/v1/users/${userId}/settings`,
+                method: 'GET',
+                noCache: isOwnProfile,
+            });
+        }
+
+        if (data.status === 'success' && data.settings) {
+            apiSettings = data.settings;
+
+            if (
+                (apiSettings.environment === 0 ||
+                    apiSettings.environment === 1) &&
+                !apiSettings.status &&
+                !apiSettings.border &&
+                !apiSettings.gradient &&
+                Object.keys(apiSettings).length <= 4
+            ) {
+                apiProvidedMeaningfulSettings = false;
+            } else {
+                apiProvidedMeaningfulSettings = true;
+            }
+        }
+    } catch (error) {
+        console.warn('RoValra: Failed to fetch settings from API.', error);
+        apiProvidedMeaningfulSettings = false;
+    }
+
+    let finalStatus = null;
+    let finalEnvironment = 1;
+    let finalGradient = null;
+    let finalBorder = null;
+
+    if (apiProvidedMeaningfulSettings) {
+        finalStatus = apiSettings.status;
+        finalEnvironment = apiSettings.environment;
+        finalGradient = apiSettings.gradient;
+        finalBorder = apiSettings.border ?? null;
+    }
+
+    if (
+        isOwnProfile &&
+        apiSettings &&
+        apiSettings.border &&
+        apiProvidedMeaningfulSettings
+    ) {
+        document.dispatchEvent(
+            new CustomEvent('rovalra:syncAvatarBorder', {
+                detail: { borderUrl: apiSettings.border },
+            }),
+        );
+    }
+
+    return {
+        status: finalStatus,
+        environment: finalEnvironment || 1,
+        gradient: finalGradient,
+        border: finalBorder,
+        Views: Number(apiSettings.Views) || 0,
+        hide_views:
+            apiSettings.hide_views === 'true' || apiSettings.hide_views === true,
+        canUseApi: apiProvidedMeaningfulSettings,
+        anonymous_leaderboard:
+            apiSettings.anonymous_leaderboard === 'true' ||
+            apiSettings.anonymous_leaderboard === true,
+    };
+}
+
+async function processBatchQueue() {
+    if (batchInProgress || batchQueue.length === 0) return;
+
+    batchInProgress = true;
+    const currentBatch = [...batchQueue];
+    batchQueue = [];
+    clearTimeout(batchTimeout);
+    batchTimeout = null;
+
+    const processedKeys = new Set();
+
+    try {
+        const authedId = await getAuthenticatedUserId();
+        const authenticatedUserId = authedId ? String(authedId) : null;
+
+        const userIdsToFetch = currentBatch
+            .map((item) => item.userId)
+            .filter(
+                (id, index, self) =>
+                    String(id) !== authenticatedUserId &&
+                    self.indexOf(id) === index,
+            )
+            .slice(0, BATCH_MAX_SIZE);
+
+        const userIdsToFetchStrings = userIdsToFetch.map((id) => String(id));
+
+        if (userIdsToFetch.length > 0) {
+            // VALRA EDIT HERE: /v1/users/settings?user_ids=... GET should return
+            // `border` in each user's settings object alongside status, environment
+            // and gradient, so other users' borders can be displayed.
+            const data = await callRobloxApiJson({
+                isRovalraApi: true,
+                subdomain: 'apis',
+                endpoint: `/v1/users/settings?user_ids=${userIdsToFetchStrings.join(',')}`,
+                method: 'GET',
+            });
+
+            if (data.status === 'success' && data.settings) {
+                for (const [userId, apiSettings] of Object.entries(
+                    data.settings,
+                )) {
+                    const batchItems = currentBatch.filter(
+                        (item) => String(item.userId) === String(userId),
+                    );
+
+                    for (const item of batchItems) {
+                        const cacheKey = String(userId);
+                        if (processedKeys.has(cacheKey)) continue;
+
+                        const settings = await processApiSettings(
+                            userId,
+                            apiSettings,
+                            item.options,
+                        );
+
+                        await saveToCache(cacheKey, settings);
+                        processedKeys.add(cacheKey);
+
+                        const resolvers = pendingResolvers.get(cacheKey);
+                        if (resolvers) {
+                            resolvers.forEach((r) => r.resolve(settings));
+                            pendingResolvers.delete(cacheKey);
+                        }
+                    }
+                }
+            }
+        }
+
+        for (const batchItem of currentBatch) {
+            const cacheKey = String(batchItem.userId);
+            if (!processedKeys.has(cacheKey)) {
+                const settings = await fetchAndProcessSettings(
+                    batchItem.userId,
+                    batchItem.options,
+                );
+
+                await saveToCache(cacheKey, settings);
+                processedKeys.add(cacheKey);
+
+                const resolvers = pendingResolvers.get(cacheKey);
+                if (resolvers) {
+                    resolvers.forEach((r) => r.resolve(settings));
+                    pendingResolvers.delete(cacheKey);
+                }
+            }
+        }
+    } catch (error) {
+        console.warn(
+            'RoValra: Batch settings fetch failed, falling back to individual requests.',
+            error,
+        );
+
+        for (const batchItem of currentBatch) {
+            const cacheKey = String(batchItem.userId);
+            try {
+                const settings = await fetchAndProcessSettings(
+                    batchItem.userId,
+                    batchItem.options,
+                );
+
+                const resolvers = pendingResolvers.get(cacheKey);
+                if (resolvers) {
+                    resolvers.forEach((r) => r.resolve(settings));
+                    pendingResolvers.delete(cacheKey);
+                }
+            } catch (e) {
+                const resolvers = pendingResolvers.get(cacheKey);
+                if (resolvers) {
+                    resolvers.forEach((r) => r.reject(e));
+                    pendingResolvers.delete(cacheKey);
+                }
+            }
+        }
+    } finally {
+        batchInProgress = false;
+        if (batchQueue.length > 0) {
+            batchTimeout = setTimeout(processBatchQueue, BATCH_DELAY_MS);
+        }
+    }
+}
+
+async function processApiSettings(userId, apiSettings, options) {
+    assertValidUserId(userId);
+
+    const authenticatedUserId = await getAuthenticatedUserId();
+    const isOwnProfile =
+        authenticatedUserId && String(authenticatedUserId) === String(userId);
+
+    let apiProvidedMeaningfulSettings = false;
+
+    if (apiSettings && typeof apiSettings === 'object') {
+        if (
+            (apiSettings.environment === 0 || apiSettings.environment === 1) &&
+            !apiSettings.status &&
+            !apiSettings.border &&
+            !apiSettings.gradient &&
+            Object.keys(apiSettings).length <= 4
+        ) {
+            apiProvidedMeaningfulSettings = false;
+        } else {
+            apiProvidedMeaningfulSettings = true;
+        }
+    }
+
+    let finalStatus = null;
+    let finalEnvironment = 1;
+    let finalGradient = null;
+    let finalBorder = null;
+
+    if (apiProvidedMeaningfulSettings) {
+        finalStatus = apiSettings.status;
+        finalEnvironment = apiSettings.environment;
+        finalGradient = apiSettings.gradient;
+        finalBorder = apiSettings.border ?? null;
+    }
+
+    if (
+        isOwnProfile &&
+        apiSettings &&
+        apiSettings.border &&
+        apiProvidedMeaningfulSettings
+    ) {
+        document.dispatchEvent(
+            new CustomEvent('rovalra:syncAvatarBorder', {
+                detail: { borderUrl: apiSettings.border },
+            }),
+        );
+    }
+
+    return {
+        status: finalStatus,
+        environment: finalEnvironment || 1,
+        gradient: finalGradient,
+        border: finalBorder,
+        Views: Number(apiSettings.Views) || 0,
+        hide_views:
+            apiSettings.hide_views === 'true' || apiSettings.hide_views === true,
+        canUseApi: apiProvidedMeaningfulSettings,
+        anonymous_leaderboard:
+            apiSettings.anonymous_leaderboard === 'true' ||
+            apiSettings.anonymous_leaderboard === true,
+    };
+}
+
+export async function getUserSettings(userId, options = {}) {
+    assertValidUserId(userId);
+
+    const authedId = await getAuthenticatedUserId();
+    const authenticatedUserId = authedId ? String(authedId) : null;
+    const strUserId = String(userId);
+    const isOwnProfile =
+        authenticatedUserId && strUserId === authenticatedUserId;
+
+    const cacheKey = strUserId;
+
+    if (!options.noCache && !isOwnProfile) {
+        const memCached = memoryCache.get(cacheKey);
+        if (memCached) {
+            const staleThreshold = 300000;
+            const isStale =
+                Date.now() - (memCached.timestamp || 0) > staleThreshold;
+            if (isStale && !pendingResolvers.has(cacheKey)) {
+                if (options.disableBatch) {
+                    fetchAndProcessSettings(userId, options).then((settings) =>
+                        saveToCache(cacheKey, settings),
+                    );
+                } else {
+                    batchQueue.push({ userId, options });
+                    pendingResolvers.set(cacheKey, [
+                        {
+                            resolve: () => {},
+                            reject: () => {},
+                        },
+                    ]);
+                    if (!batchTimeout) {
+                        batchTimeout = setTimeout(
+                            processBatchQueue,
+                            BATCH_DELAY_MS,
+                        );
+                    }
+                }
+            }
+            return memCached.data;
+        }
+
+        const cached = await cache.get('user_settings', cacheKey, 'local');
+        if (cached) {
+            memoryCache.set(cacheKey, cached);
+            const staleThreshold = 300000;
+            const isStale =
+                Date.now() - (cached.timestamp || 0) > staleThreshold;
+            if (isStale && !pendingResolvers.has(cacheKey)) {
+                if (options.disableBatch) {
+                    fetchAndProcessSettings(userId, options).then((settings) =>
+                        saveToCache(cacheKey, settings),
+                    );
+                } else {
+                    batchQueue.push({ userId, options });
+                    pendingResolvers.set(cacheKey, [
+                        {
+                            resolve: () => {},
+                            reject: () => {},
+                        },
+                    ]);
+                    if (!batchTimeout) {
+                        batchTimeout = setTimeout(
+                            processBatchQueue,
+                            BATCH_DELAY_MS,
+                        );
+                    }
+                }
+            }
+            return cached.data;
+        }
+    }
+
+    if (pendingResolvers.has(cacheKey)) {
+        return new Promise((resolve, reject) => {
+            pendingResolvers.get(cacheKey).push({ resolve, reject });
+        });
+    }
+
+    if (options.disableBatch) {
+        const settings = await fetchAndProcessSettings(userId, options);
+        await saveToCache(cacheKey, settings);
+
+        return settings;
+    }
+
+    return new Promise((resolve, reject) => {
+        batchQueue.push({ userId, options });
+        pendingResolvers.set(cacheKey, [{ resolve, reject }]);
+
+        if (!batchTimeout) {
+            batchTimeout = setTimeout(processBatchQueue, BATCH_DELAY_MS);
+        }
+    });
+}
+
+/**
+ * Updates a user setting via the RoValra API.
+ * @param {string} key The setting key to update (e.g., 'environment', 'status').
+ * @param {any} value The new value for the setting.
+ * @returns {Promise<boolean>} True if the update was successful, false otherwise.
+ */
+export async function updateUserSettingViaApi(key, value) {
+    try {
+        const token = await getValidAccessToken(false, false);
+        if (!token) return false;
+
+        const apiValue = key === 'hide_views' ? Boolean(value) : String(value);
+
+        const response = await callRobloxApiJson({
+            isRovalraApi: true,
+            subdomain: 'apis',
+            endpoint: '/v1/auth/settings',
+            method: 'POST',
+            body: JSON.stringify({ key, value: apiValue }),
+        });
+        if (
+            response &&
+            response.status === 'success' &&
+            response.setting &&
+            response.setting.key === key &&
+            response.message === 'Updated successfully.'
+        ) {
+            return response.setting.value;
+        }
+        return false;
+    } catch (error) {
+        console.error(
+            `RoValra: Failed to update setting '${key}' via API.`,
+            error,
+        );
+        return false;
+    }
+}

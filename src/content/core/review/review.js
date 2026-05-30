@@ -1,7 +1,7 @@
 import { createOverlay } from '../../core/ui/overlay.js';
 import { observeElement } from '../../core/observer.js';
 
-const REVIEW_URL = "https://chromewebstore.google.com/detail/rovalra-roblox-improved/njcickgebhnpgmoodjdgohkclfplejli/reviews";
+const REVIEW_URL = "https://addons.mozilla.org/en-US/firefox/addon/rovalra-rav4/reviews/";
 const STATUS_KEY = "rovalra_review_popup_status";
 const STATS_KEY = "rovalra_review_stats";
 

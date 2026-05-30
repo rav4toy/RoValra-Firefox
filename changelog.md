@@ -1,4 +1,4 @@
-2.4.15.3 Firefox 04/05/2026
+2.5.4.1 Firefox 30/05/2026
 
 &#x20; # Fixes :
 
@@ -6,9 +6,14 @@
 * Fixed Instant Join also being blank.
 * Fixed Gifs in satuts not appearing because of CSP restrictions.
 
-&#x20; # Changes : 
+&#x20; # Changes :
 
-* Added support for Waterfox (and other 140 based browsers).
+* Added support for Waterfox ( and other 140 based browsers).
+* Updated to RoValra 2.5.4
+
+
+
+
 
 
 

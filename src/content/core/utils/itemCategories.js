@@ -3,18 +3,28 @@ import { callRobloxApiJson } from '../api.js';
 let categoriesCache = null;
 let pendingPromise = null;
 
+function cloneItemCategoryData(data) {
+    try {
+        return JSON.parse(JSON.stringify(data || []));
+    } catch (e) {
+        return Array.isArray(data) ? data.map((item) => ({ ...item })) : [];
+    }
+}
+
+
 async function fetchCategories() {
     if (categoriesCache) return categoriesCache;
     if (pendingPromise) return pendingPromise;
 
     pendingPromise = (async () => {
         try {
-            const data = await callRobloxApiJson({
+            const rawData = await callRobloxApiJson({
                 subdomain: 'catalog',
                 endpoint: '/v1/categories',
                 method: 'GET'
             });
 
+            const data = cloneItemCategoryData(rawData);
             const processed = [];
             const classicSubcats = ['ClassicShirts', 'ClassicTShirts', 'ClassicPants'];
             

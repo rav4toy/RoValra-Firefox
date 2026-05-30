@@ -1,5 +1,5 @@
 /*!
- * rovalra v2.4.15
+ * rovalra v2.5.4
  * License: GPL-3.0
  * Repository: https://github.com/NotValra/RoValra
  * This extension is provided AS-IS without warranty.
@@ -9,11 +9,11 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
 (function() {
   "use strict";
   function unpack(detail) {
-	/*__rav4*/
     if (!detail) return {};
     try {
       if (detail._ff) return JSON.parse(detail._ff);
-    } catch {}
+    } catch {
+    }
     return detail;
   }
   __name(unpack, "unpack");
@@ -289,7 +289,7 @@ var __name = (target, value) => __defProp(target, "name", { value, configurable:
   }
   __name(setupInteraction, "setupInteraction"), document.addEventListener("rovalraGlobe_UpdateData", (e) => {
     const d = unpack(e.detail);
-    d.serverCounts && (serverCountsData = d.serverCounts, markers.forEach((m) => {
+    d?.serverCounts && (serverCountsData = d.serverCounts, markers.forEach((m) => {
       m.hasServers = (serverCountsData[m.code] || 0) > 0;
     }));
   }), document.addEventListener("rovalraGlobeEasterEgg", (e) => {

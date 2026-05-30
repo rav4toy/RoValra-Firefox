@@ -30,17 +30,29 @@ YourFeatureName: {
         "**Markdown** is supported here."
     ],
     type: "checkbox", // Common types: "checkbox", "input", "select"
-    default: true,    // Set the default state
+    default: true,    // Set the default state, only features that are likely to be useful to everyone should be on by default.
     storageKey: ["What Ever Storage Key Your Feature Uses", "In case of multiple keys"] // Add this if your feature stores stuff for its functionality. So a user is able to clear the storage
+    contributors: ["YOUR USER ID HERE"] // This adds your user as a contributor under a setting, which should be added if you contributed to an existing setting or created an entirely new one.
     // Optional properties that adds a pill beside the title with a tooltip explaining why its there
     // experimental: "reason why its experimental",
     // deprecated: "Reason if the feature is no longer supported",
     // beta: "Reason for it being a beta",
     // Any feature that is, experimental, a beta or deprecated should not be on by default.
     // childSettings: { ... } // If this setting has sub-settings
+    // locked: 'Reason for locked', This is used to forcefully disable a feature, e.i if it broke.
+    //  isPermanent: true, tells the script if its locked permanently
 }
 ```
 
+### Using your setting
+
+To retrieve the value of a setting, import the `settings` API from `./src/content/core/settings/getSettings.js`, and use it as: `await settings.YourFeatureName`, which returns the value.
+
+## Donator perks
+
+If you plan on making donator perks please let me know before hand so I can help update this api `https://apis.rovalra.com/v1/users/447170745/settings` accordingly.
+
+To access the user settings api we use `settingHandler.js`
 
 ## Contributor Badge
 
@@ -56,18 +68,27 @@ Simply add your User ID as a string to the `CONTRIBUTOR_USER_IDS` array:
 export const CONTRIBUTOR_USER_IDS = [
     '123',
     '1234',
-    'YOUR_USER_ID_HERE' // Add your Roblox User ID here, with your github user as a comment so we know who is who
+    'YOUR_USER_ID_HERE', // Add your Roblox User ID here, with your github user as a comment so we know who is who
 ];
 ```
+
 The badge is completely optional.
 
 ## Code Guidelines
 
-*   Keep code clean and readable.
-*   Follow the existing coding style of the project.
-*   Test your changes before submitting.
-*   For safety reasons, all innerHTML should be purified with DOMPurify, or preferably using safeHtml
-*   Generally follow how other scripts do things and how they import other scripts to implement functionality.
-*   All api requests should go through api.js
-*   Never use third party apis that isn't RoValra.com, Roblox.com or rbxcdn.com in your prs
-*   Make addtions to the site look as close to Roblox as possibl
+- Keep code clean and readable.
+- Follow the existing coding style of the project.
+- Test your changes before submitting.
+- For safety reasons, all `innerHTML` should be purified with `DOMPurify`, or preferably using `safeHtml`.
+    - **Note:** sanitising with safeHtml prevents everything including styling, while using DOMPurify doesn't (by default).
+- Generally follow how other scripts do things and how they import other scripts to implement functionality.
+- All api requests should go through `api.js`
+- Never use third party apis that isn't RoValra.com, Roblox.com or rbxcdn.com in your PRS. You can however use a third party API as a proof of concept in your PR so we know how to make an official API that works for your PR.
+- Make additions to the site look as close to Roblox as possible.
+- Never update host permissions or permissions of the extension.
+- Never look at text to figure out where to add stuff on the site, as this wont work with different language settings.
+- Make sure your changes has locale support via `i18n.js`
+- Make sure you never create a new observer and only use `observer.js`
+- Make sure you use `IdExtractor.js` for getting ids from url.
+- For new features create a new script in side a sub folder of features matching the feature your making and import it via `index.js` Never add you feature into an existing script unless it is a child setting of the main feature of the file.
+- For svgs always add them in `assets.js` with a proper name so it can be reused. RoValra mostly uses Material Icons since they look the most like Robloxs, but feel free to use others if you think they match Robloxs svgs more.

@@ -4,6 +4,14 @@ import { callRobloxApiJson } from '../../core/api.js';
 import { createOverlay } from '../../core/ui/overlay.js';
 import { createButton } from '../../core/ui/buttons.js';
 import DOMPurify from 'dompurify';
+import { ts } from '../../core/locale/i18n.js';
+import {
+    convertCurrencyAmount,
+    DEVEX_USD_RATE,
+    formatDisplayCurrency,
+    getRobuxFiatSettings,
+    ROBUX_FIAT_RATE_MODE_DEVEX,
+} from '../../core/transactions/fiat.js';
 
 function onElementFound(container) {
     const buttonIdentifier = 'rovalra-total-spent-btn';
@@ -27,6 +35,8 @@ function onElementFound(container) {
         totalSpent: 0,
         totalMoneySpent: 0,
         currencyCode: 'USD',
+        moneyRateMode: 'normal',
+        devexPerRobux: DEVEX_USD_RATE,
         transactionsProcessed: 0,
         purchaseCounts: {},
         stipendCounts: {},
@@ -74,7 +84,7 @@ function onElementFound(container) {
                     const type =
                         transaction.details && transaction.details.type
                             ? transaction.details.type
-                            : 'Other';
+                            : ts('totalSpent.other');
 
                     if (!state.itemTypeBreakdown[type]) {
                         state.itemTypeBreakdown[type] = { count: 0, robux: 0 };
@@ -105,6 +115,10 @@ function onElementFound(container) {
             this.updateDOM();
         },
         getPriceForRobuxAmount(amount) {
+            if (state.moneyRateMode === ROBUX_FIAT_RATE_MODE_DEVEX) {
+                return amount * state.devexPerRobux;
+            }
+
             let closestAmount = 0;
             let smallestDiff = Infinity;
             for (const robuxAmount of this.robuxToPriceMap.keys()) {
@@ -153,10 +167,7 @@ function onElementFound(container) {
             const formatRobux = (amount) =>
                 `${amount.toLocaleString()} ${robuxIcon}`;
             const formatCurrency = (amount) =>
-                amount.toLocaleString(undefined, {
-                    style: 'currency',
-                    currency: state.currencyCode,
-                });
+                formatDisplayCurrency(amount, state.currencyCode);
 
             if (transEl)
                 transEl.textContent =
@@ -166,10 +177,7 @@ function onElementFound(container) {
                     formatRobux(state.totalSpent),
                 );
             if (moneySpentEl)
-                moneySpentEl.textContent = state.totalMoneySpent.toLocaleString(
-                    undefined,
-                    { style: 'currency', currency: state.currencyCode },
-                );
+                moneySpentEl.textContent = formatCurrency(state.totalMoneySpent);
 
             if (itemTypeBreakdownEl) {
                 const sortedTypes = Object.keys(state.itemTypeBreakdown).sort(
@@ -215,9 +223,9 @@ function onElementFound(container) {
                             price = this.getPriceForRobuxAmount(amount);
                         const total = price
                             ? formatCurrency(price * count)
-                            : 'N/A';
+                            : ts('totalSpent.na');
                         return `<li>
-                                <span class="rovalra-breakdown-amount">${formatRobux(amount)} Pack</span>
+                                <span class="rovalra-breakdown-amount">${formatRobux(amount)} ${ts('totalSpent.pack')}</span>
                                 <span class="rovalra-breakdown-count">x${count}</span>
                                 <span class="rovalra-breakdown-price">${total}</span>
                             </li>`;
@@ -239,10 +247,10 @@ function onElementFound(container) {
                             product = this.premiumRobuxToProductMap.get(amount);
                         const total = product
                             ? formatCurrency(product.price * count)
-                            : 'N/A';
+                            : ts('totalSpent.na');
                         const name = product
                             ? product.name
-                            : `${formatRobux(amount)} Stipend`;
+                            : `${formatRobux(amount)} ${ts('totalSpent.stipend')}`;
                         return `<li>
                                 <span class="rovalra-breakdown-amount">${name}</span>
                                 <span class="rovalra-breakdown-count">x${count}</span>
@@ -269,9 +277,9 @@ function onElementFound(container) {
         isUIUpdate = true;
         if (overlayInstance) overlayInstance.close();
 
-        const moneySpentValue = state.totalMoneySpent.toLocaleString(
-            undefined,
-            { style: 'currency', currency: state.currencyCode },
+        const moneySpentValue = formatDisplayCurrency(
+            state.totalMoneySpent,
+            state.currencyCode,
         );
         const robuxSpentValue = state.totalSpent.toLocaleString();
         const transactionsValue = state.transactionsProcessed.toLocaleString();
@@ -287,7 +295,7 @@ function onElementFound(container) {
             state.status === CALCULATION_STATE.IDLE ||
             state.status === CALCULATION_STATE.PAUSED
         ) {
-            header = 'Calculate Spend';
+            header = ts('totalSpent.calculateSpend');
             const desc = document.createElement('div');
             desc.className = 'rovalra-description';
 
@@ -295,15 +303,14 @@ function onElementFound(container) {
             btnStack.className = 'rovalra-action-stack';
 
             if (state.status === CALCULATION_STATE.PAUSED) {
-                desc.textContent =
-                    'Calculation paused. Resume to continue counting.';
+                desc.textContent = ts('totalSpent.pausedMessage');
                 const resumeButton = createButton(
-                    'Resume Calculation',
+                    ts('totalSpent.resumeCalculation'),
                     'primary',
                     { onClick: runCalculation },
                 );
                 const newCalcButton = createButton(
-                    'Start New Calculation',
+                    ts('totalSpent.startNewCalculation'),
                     'secondary',
                     {
                         onClick: () => {
@@ -314,10 +321,9 @@ function onElementFound(container) {
                 );
                 btnStack.append(resumeButton, newCalcButton);
             } else {
-                desc.textContent =
-                    'Select a mode to calculate your transaction history.';
+                desc.textContent = ts('totalSpent.description');
                 const robuxButton = createButton(
-                    'Calculate Robux Spent',
+                    ts('totalSpent.calculateRobux'),
                     'primary',
                     {
                         onClick: () =>
@@ -325,7 +331,7 @@ function onElementFound(container) {
                     },
                 );
                 const moneyButton = createButton(
-                    'Calculate Money Spent',
+                    ts('totalSpent.calculateMoney'),
                     'primary',
                     {
                         onClick: () =>
@@ -356,18 +362,18 @@ function onElementFound(container) {
                 statsGridHTML = `
                     <div class="rovalra-stats-grid">
                         <div class="rovalra-stat-item centered-content">
-                            <span class="rovalra-stat-label">Transactions Scanned</span>
+                            <span class="rovalra-stat-label">${ts('totalSpent.transactionsScanned')}</span>
                             <span class="rovalra-stat-value" id="rovalra-stat-transactions">${transactionsValue}</span>
                         </div>
                         <div class="rovalra-stat-item centered-content">
-                            <span class="rovalra-stat-label">Total Robux Spent</span>
+                            <span class="rovalra-stat-label">${ts('totalSpent.totalRobuxSpent')}</span>
                             <span class="rovalra-stat-value" id="rovalra-stat-robux">${robuxSpentValue} <span class="icon-robux-16x16" style="vertical-align: -3px;"></span></span>
                         </div>
                     </div>`;
 
                 breakdownsHTML = `
                     <div class="rovalra-breakdown-section">
-                        <span class="rovalra-stat-label">Item Type Breakdown</span>
+                        <span class="rovalra-stat-label">${ts('totalSpent.itemTypeBreakdown')}</span>
                         <div id="rovalra-itemtype-breakdown-container"></div>
                     </div>
                 `;
@@ -375,21 +381,21 @@ function onElementFound(container) {
                 statsGridHTML = `
                     <div class="rovalra-stats-grid">
                         <div class="rovalra-stat-item">
-                            <span class="rovalra-stat-label">Transactions Scanned</span>
+                            <span class="rovalra-stat-label">${ts('totalSpent.transactionsScanned')}</span>
                             <span class="rovalra-stat-value" id="rovalra-stat-transactions">${transactionsValue}</span>
                         </div>
                         <div class="rovalra-stat-item">
-                            <span class="rovalra-stat-label">Total Spent (Approx.)</span>
+                            <span class="rovalra-stat-label">${ts('totalSpent.totalMoneySpent')}</span>
                             <span class="rovalra-stat-value" id="rovalra-stat-money-spent">${moneySpentValue}</span>
                         </div>
                     </div>`;
                 breakdownsHTML = `
                     <div class="rovalra-breakdown-section">
-                        <span class="rovalra-stat-label">Premium Subscription Breakdown</span>
+                        <span class="rovalra-stat-label">${ts('totalSpent.premiumBreakdown')}</span>
                         <div id="rovalra-premium-breakdown-container"></div>
                     </div>
                     <div class="rovalra-breakdown-section">
-                        <span class="rovalra-stat-label">Robux Purchase Breakdown</span>
+                        <span class="rovalra-stat-label">${ts('totalSpent.purchaseBreakdown')}</span>
                         <div id="rovalra-purchase-breakdown-container"></div>
                     </div>
                 `;
@@ -397,13 +403,13 @@ function onElementFound(container) {
 
             switch (state.status) {
                 case CALCULATION_STATE.RUNNING: {
-                    header = 'Calculating';
+                    header = ts('totalSpent.calculatingTitle');
 
-                    let statusText = 'Calculating...';
+                    let statusText = ts('totalSpent.calculatingText');
                     let statusClass = 'rovalra-status-text';
 
                     if (state.isRateLimited) {
-                        statusText = 'API rate limited. Still counting...';
+                        statusText = ts('totalSpent.rateLimited');
                         statusClass =
                             'rovalra-status-text rovalra-rate-limit-text';
                     }
@@ -419,10 +425,10 @@ function onElementFound(container) {
                 }
 
                 case CALCULATION_STATE.DONE: {
-                    header = 'Calculation Complete';
-                    const doneText = `<p class="text-body">All relevant transactions have been scanned.</p><p class="text-caption-body text-secondary" style="margin-bottom: 16px;"></p>`;
+                    header = ts('totalSpent.calculationComplete');
+                    const doneText = `<p class="text-body">${ts('totalSpent.allScanned')}</p><p class="text-caption-body text-secondary" style="margin-bottom: 16px;"></p>`;
                     const newCalcBtn = createButton(
-                        'New Calculation',
+                        ts('totalSpent.newCalculation'),
                         'primary',
                         {
                             onClick: () => {
@@ -443,10 +449,10 @@ function onElementFound(container) {
                 }
 
                 case CALCULATION_STATE.ERROR:
-                    header = 'An Error Occurred';
+                    header = ts('totalSpent.errorTitle');
                     statusContent = `<p class="text-error">${state.errorMessage}</p>`;
                     actions = [
-                        createButton('Retry', 'primary', {
+                        createButton(ts('totalSpent.retry'), 'primary', {
                             onClick: resetAndRunCalculation,
                         }),
                     ];
@@ -520,8 +526,7 @@ function onElementFound(container) {
                     subdomain: 'users',
                     endpoint: '/v1/users/authenticated',
                 });
-                if (!userData.id)
-                    throw new Error('Could not retrieve user ID.');
+                if (!userData.id) throw new Error(ts('totalSpent.errorUserId'));
                 state.userId = userData.id;
             }
 
@@ -529,31 +534,70 @@ function onElementFound(container) {
                 state.calculationType === CALCULATION_TYPE.MONEY_SPENT &&
                 animationController.robuxToPriceMap.size === 0
             ) {
+                const fiatSettings = await getRobuxFiatSettings();
+                state.currencyCode =
+                    fiatSettings.robuxFiatDisplayCurrency || 'USD';
+                state.moneyRateMode =
+                    fiatSettings.robuxFiatRateMode || 'normal';
+
+                if (state.moneyRateMode === ROBUX_FIAT_RATE_MODE_DEVEX) {
+                    state.devexPerRobux = await convertCurrencyAmount(
+                        DEVEX_USD_RATE,
+                        'USD',
+                        state.currencyCode,
+                    );
+                }
+
                 const productsData = await callRobloxApiJson({
                     subdomain: 'premiumfeatures',
                     endpoint: '/v1/products?skipPremiumUserCheck=true',
                 });
-                productsData.products.forEach((p) => {
-                    if (p.premiumFeatureTypeName === 'Subscription') {
-                        animationController.premiumRobuxToProductMap.set(
-                            p.robuxAmount,
-                            {
-                                price: p.price.amount,
-                                name: p.defaultDisplayName,
-                            },
-                        );
-                    } else {
-                        animationController.robuxToPriceMap.set(
-                            p.robuxAmount,
+
+                await Promise.all(
+                    productsData.products.map(async (p) => {
+                        const convertedPrice = await convertCurrencyAmount(
                             p.price.amount,
+                            p.price?.currency?.currencyCode || 'USD',
+                            state.currencyCode,
                         );
-                    }
-                });
-                state.currencyCode =
-                    productsData.products[0]?.price.currency.currencyCode ||
-                    'USD';
-                if (!animationController.robuxToPriceMap.has(80))
-                    animationController.robuxToPriceMap.set(80, 0.99);
+
+                        const effectivePrice =
+                            state.moneyRateMode === ROBUX_FIAT_RATE_MODE_DEVEX
+                                ? p.robuxAmount * state.devexPerRobux
+                                : convertedPrice;
+
+                        const stipendName =
+                            p.defaultDisplayName ||
+                            `${p.robuxAmount.toLocaleString()} Robux`;
+
+                        if (p.premiumFeatureTypeName === 'Subscription') {
+                            animationController.premiumRobuxToProductMap.set(
+                                p.robuxAmount,
+                                {
+                                    price: effectivePrice,
+                                    name: stipendName,
+                                },
+                            );
+                        } else {
+                            animationController.robuxToPriceMap.set(
+                                p.robuxAmount,
+                                effectivePrice,
+                            );
+                        }
+                    }),
+                );
+
+                if (!animationController.robuxToPriceMap.has(80)) {
+                    const fallbackPrice =
+                        state.moneyRateMode === ROBUX_FIAT_RATE_MODE_DEVEX
+                            ? 80 * state.devexPerRobux
+                            : await convertCurrencyAmount(
+                                  0.99,
+                                  'USD',
+                                  state.currencyCode,
+                              );
+                    animationController.robuxToPriceMap.set(80, fallbackPrice);
+                }
             }
 
             const transactionTasks =
@@ -645,7 +689,9 @@ function onElementFound(container) {
                             state.retryCount++;
                             if (state.retryCount > 5) {
                                 throw new Error(
-                                    `Failed after multiple retries. Last error: ${error.message || 'Unknown'}`,
+                                    ts('totalSpent.errorRetries', {
+                                        error: error.message || 'Unknown',
+                                    }),
                                 );
                             }
                             const waitUntil = Date.now() + 1000;
@@ -690,12 +736,17 @@ function onElementFound(container) {
     };
 
     const startCalculation = (type) => {
+        animationController.robuxToPriceMap.clear();
+        animationController.premiumRobuxToProductMap.clear();
         state = {
             ...state,
             status: CALCULATION_STATE.IDLE,
             calculationType: type,
             totalSpent: 0,
             totalMoneySpent: 0,
+            currencyCode: 'USD',
+            moneyRateMode: 'normal',
+            devexPerRobux: DEVEX_USD_RATE,
             transactionsProcessed: 0,
             purchaseCounts: {},
             stipendCounts: {},
@@ -712,10 +763,14 @@ function onElementFound(container) {
         startCalculation(state.calculationType);
     };
 
-    const totalSpentButton = createButton('Calculate Spend', 'secondary', {
-        id: buttonIdentifier,
-        onClick: () => updateOverlay(),
-    });
+    const totalSpentButton = createButton(
+        ts('totalSpent.calculateSpend'),
+        'secondary',
+        {
+            id: buttonIdentifier,
+            onClick: () => updateOverlay(),
+        },
+    );
     totalSpentButton.classList.add('btn-growth-md');
     totalSpentButton.style.marginLeft = '10px';
     totalSpentButton.style.marginTop = 'auto';

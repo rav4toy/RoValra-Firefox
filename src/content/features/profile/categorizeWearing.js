@@ -1,14 +1,16 @@
 import { observeElement } from '../../core/observer.js';
+import { callRobloxApiJson } from '../../core/api.js';
+import { getUserIdFromUrl } from '../../core/idExtractor.js';
 import { getAllCategories } from '../../core/utils/itemCategories.js';
 import { createItemCard } from '../../core/ui/items/items.js';
 import { createPillToggle } from '../../core/ui/general/pillToggle.js';
 import { createScrollButtons } from '../../core/ui/general/scrollButtons.js';
-import { safeHtml } from '../../core/packages/dompurify.js'
-// TODO make roseals currently wearing replace rovalras.
+import { safeHtml } from '../../core/packages/dompurify.js';
+import { ts } from '../../core/locale/i18n.js';
 let totalPrice = 0;
 const processedBundleIds = new Set();
 let totalPriceElement = null;
-
+export const assetInfoCache = new Map();
 function debounce(func, wait) {
     let timeout;
     return function executedFunction(...args) {
@@ -24,50 +26,86 @@ function debounce(func, wait) {
 const CONSTANT_IDS = {
     ANIMATIONS: [48, 50, 51, 52, 53, 54, 55],
     EMOTES: [61],
-    BODY_PARTS: [17, 27, 28, 29, 30, 31, 78, 79]
+    BODY_PARTS: [17, 27, 28, 29, 30, 31, 78, 79],
 };
 
 const ASSET_TYPE_IDS = {
     WEARABLES: new Set(),
     EMOTES: new Set(CONSTANT_IDS.EMOTES),
     ANIMATIONS: new Set(CONSTANT_IDS.ANIMATIONS),
-    BODY_PARTS: new Set(CONSTANT_IDS.BODY_PARTS)
+    BODY_PARTS: new Set(CONSTANT_IDS.BODY_PARTS),
 };
 
 let accessoriesGrid = null;
 let emotesGrid = null;
 let animationsGrid = null;
 let bodyPartsGrid = null;
-let currentFilter = 'Items';
-const discoveredCategories = new Set();
+let currentFilter = 'items';
+let activeWearingUserId = null;
+let activeWearingRequestId = 0;
+const wearingSectionCache = new Map();
+export const discoveredCategories = new Set();
 let pillToggleWrapper = null;
-let isBodyPartsCategoryEnabled = true;
-let isAnimationsCategoryEnabled = true;
-let isEmotesCategoryEnabled = true;
+export let isBodyPartsCategoryEnabled = true;
+export let isAnimationsCategoryEnabled = true;
+export let isEmotesCategoryEnabled = true;
 
-async function loadAssetTypeIds() {
+export function enableAllCategories() {
+    isBodyPartsCategoryEnabled = true;
+    isAnimationsCategoryEnabled = true;
+    isEmotesCategoryEnabled = true;
+}
+
+export async function loadAssetTypeIds() {
     try {
         const allCategories = await getAllCategories();
-        allCategories.forEach(cat => {
-            const catName = (cat.category || cat.name || "").replace(/\s+/g, '').toLowerCase();
+        allCategories.forEach((cat) => {
+            const catName = (cat.category || cat.name || '')
+                .replace(/\s+/g, '')
+                .toLowerCase();
             if (catName.includes('animation')) {
                 if (cat.subcategories) {
-                    cat.subcategories.forEach(sub => {
+                    cat.subcategories.forEach((sub) => {
                         const subName = sub.subcategory.toLowerCase();
                         if (subName.includes('emote')) {
-                            sub.assetTypeIds?.forEach(id => ASSET_TYPE_IDS.EMOTES.add(id));
+                            sub.assetTypeIds?.forEach((id) =>
+                                ASSET_TYPE_IDS.EMOTES.add(id),
+                            );
                         } else {
-                            sub.assetTypeIds?.forEach(id => ASSET_TYPE_IDS.ANIMATIONS.add(id));
+                            sub.assetTypeIds?.forEach((id) =>
+                                ASSET_TYPE_IDS.ANIMATIONS.add(id),
+                            );
                         }
                     });
                 }
-                cat.assetTypeIds?.forEach(id => ASSET_TYPE_IDS.ANIMATIONS.add(id));
-            } 
-            const isWearable = ['accessories', 'clothing', 'classicclothing', 'bundles'].some(n => catName.includes(n));
+                cat.assetTypeIds?.forEach((id) =>
+                    ASSET_TYPE_IDS.ANIMATIONS.add(id),
+                );
+            }
+            const isWearable = [
+                'accessories',
+                'clothing',
+                'classicclothing',
+                'bundles',
+            ].some((n) => catName.includes(n));
             if (isWearable) {
-                cat.assetTypeIds?.forEach(id => ASSET_TYPE_IDS.WEARABLES.add(id));
-                cat.subcategories?.forEach(sub => {
-                    sub.assetTypeIds?.forEach(id => ASSET_TYPE_IDS.WEARABLES.add(id));
+                cat.assetTypeIds?.forEach((id) =>
+                    ASSET_TYPE_IDS.WEARABLES.add(id),
+                );
+                cat.subcategories?.forEach((sub) => {
+                    sub.assetTypeIds?.forEach((id) =>
+                        ASSET_TYPE_IDS.WEARABLES.add(id),
+                    );
+                });
+            }
+            if (catName.includes('bodyparts')) {
+                cat.assetTypeIds?.forEach((id) =>
+                    ASSET_TYPE_IDS.BODY_PARTS.add(id),
+                );
+                cat.subcategories?.forEach((sub) => {
+                    sub.assetTypeIds?.forEach((id) =>
+                        ASSET_TYPE_IDS.BODY_PARTS.add(id),
+                    );
                 });
             }
         });
@@ -76,12 +114,46 @@ async function loadAssetTypeIds() {
     }
 }
 
-const assetInfoCache = new Map();
-const pendingItems = new Map();
+export const pendingItems = new Map();
+const originalThumbnailCache = new Map();
+
+function getOriginalThumbnailData(itemEl, assetId) {
+    const cached = originalThumbnailCache.get(assetId);
+    if (cached) return cached;
+
+    const img = itemEl?.querySelector(
+        'img[src], img[data-src], img[data-thumb-url]',
+    );
+    const imageUrl =
+        img?.currentSrc ||
+        img?.src ||
+        img?.dataset?.src ||
+        img?.dataset?.thumbUrl ||
+        '';
+
+    if (
+        !imageUrl ||
+        imageUrl.startsWith('data:') ||
+        imageUrl === window.location.href
+    ) {
+        return null;
+    }
+
+    const thumbnailData = {
+        state: 'Completed',
+        targetId: assetId,
+        imageUrl,
+        thumbnailType: 'Asset',
+    };
+    originalThumbnailCache.set(assetId, thumbnailData);
+    return thumbnailData;
+}
 
 function updateTotalDisplay() {
     if (!totalPriceElement) {
-        totalPriceElement = document.getElementById('rovalra-wearing-total-price');
+        totalPriceElement = document.getElementById(
+            'rovalra-wearing-total-price',
+        );
     }
     if (totalPriceElement) {
         if (totalPrice > 0) {
@@ -95,13 +167,15 @@ function updateTotalDisplay() {
     }
 }
 
-function recalculateTotalPrice() {
+export function recalculateTotalPrice() {
     totalPrice = 0;
     processedBundleIds.clear();
-    
-    const allCards = document.querySelectorAll('.rovalra-category-grid .rovalra-item-card');
-    
-    allCards.forEach(card => {
+
+    const allCards = document.querySelectorAll(
+        '.rovalra-category-grid .rovalra-item-card',
+    );
+
+    allCards.forEach((card) => {
         if (card.classList.contains('shimmer')) return;
 
         const link = card.querySelector('a.rovalra-item-card-link');
@@ -127,7 +201,6 @@ function recalculateTotalPrice() {
         }
 
         const bundleId = card.dataset.rovalraBundleId;
-        const isBundle = link.href.includes('/bundles/');
 
         if (bundleId) {
             if (!processedBundleIds.has(bundleId)) {
@@ -155,19 +228,25 @@ function updateScrollButtonStates(container, leftBtn, rightBtn) {
 
 function getCategoryName(assetTypeId) {
     const id = parseInt(assetTypeId);
-    if (isEmotesCategoryEnabled && ASSET_TYPE_IDS.EMOTES.has(id)) return 'Emotes';
-    if (isAnimationsCategoryEnabled && ASSET_TYPE_IDS.ANIMATIONS.has(id)) return 'Animations';
-    if (isBodyPartsCategoryEnabled && ASSET_TYPE_IDS.BODY_PARTS.has(id)) return 'Body Parts';
-    return 'Items';
+    if (isEmotesCategoryEnabled && ASSET_TYPE_IDS.EMOTES.has(id))
+        return 'emotes';
+    if (isAnimationsCategoryEnabled && ASSET_TYPE_IDS.ANIMATIONS.has(id))
+        return 'animations';
+    if (isBodyPartsCategoryEnabled && ASSET_TYPE_IDS.BODY_PARTS.has(id))
+        return 'bodyParts';
+    return 'items';
 }
 
 function refreshPillToggle() {
     if (!pillToggleWrapper) return;
-    const options = Array.from(discoveredCategories).map(cat => ({ text: cat, value: cat }));
-    const categoryOrder = ['Items'];
-    if (isBodyPartsCategoryEnabled) categoryOrder.push('Body Parts');
-    if (isAnimationsCategoryEnabled) categoryOrder.push('Animations');
-    if (isEmotesCategoryEnabled) categoryOrder.push('Emotes');
+    const options = Array.from(discoveredCategories).map((cat) => ({
+        text: ts(`categorizeWearing.${cat}`),
+        value: cat,
+    }));
+    const categoryOrder = ['items'];
+    if (isBodyPartsCategoryEnabled) categoryOrder.push('bodyParts');
+    if (isAnimationsCategoryEnabled) categoryOrder.push('animations');
+    if (isEmotesCategoryEnabled) categoryOrder.push('emotes');
 
     options.sort((a, b) => {
         const indexA = categoryOrder.indexOf(a.value);
@@ -177,159 +256,453 @@ function refreshPillToggle() {
         return indexA - indexB;
     });
     pillToggleWrapper.innerHTML = '';
-    if (options.length === 0) return;
+    if (options.length === 0) {
+        if (accessoriesGrid) accessoriesGrid.style.display = 'none';
+        if (emotesGrid) emotesGrid.style.display = 'none';
+        if (animationsGrid) animationsGrid.style.display = 'none';
+        if (bodyPartsGrid) bodyPartsGrid.style.display = 'none';
+        return;
+    }
+
+    let initialValueForToggle;
+
+    // If user has explicitly selected a category (i.e. not the default 'items') and it's still available, respect it.
+    if (currentFilter !== 'items' && discoveredCategories.has(currentFilter)) {
+        initialValueForToggle = currentFilter;
+    } else {
+        // Otherwise, find the best available default according to the visual order.
+        const bestDefault = categoryOrder.find((cat) =>
+            discoveredCategories.has(cat),
+        );
+        if (bestDefault) {
+            initialValueForToggle = bestDefault;
+        } else if (options.length > 0) {
+            initialValueForToggle = options[0].value; // Fallback
+        } else {
+            updateTabVisibility(null);
+            return;
+        }
+    }
+
     const newPillToggle = createPillToggle({
         options: options,
-        initialValue: discoveredCategories.has(currentFilter) ? currentFilter : options[0].value,
+        initialValue: initialValueForToggle,
         onChange: (value) => {
             currentFilter = value;
-            updateTabVisibility();
-            const container = document.querySelector('.rovalra-items-scroll-container');
+            const cacheEntry = getWearingCacheEntry();
+            if (cacheEntry) cacheEntry.currentFilter = value;
+            updateTabVisibility(value);
+            const container = document.querySelector(
+                '.rovalra-items-scroll-container',
+            );
             if (container) {
                 const left = container.parentElement.querySelector('.left');
                 const right = container.parentElement.querySelector('.right');
-                setTimeout(() => updateScrollButtonStates(container, left, right), 50);
+                setTimeout(
+                    () => updateScrollButtonStates(container, left, right),
+                    50,
+                );
             }
-        }
+        },
     });
     pillToggleWrapper.appendChild(newPillToggle);
-    updateTabVisibility();
+    updateTabVisibility(initialValueForToggle);
 }
 
-function updateTabVisibility() {
+function updateTabVisibility(filter) {
     if (!accessoriesGrid) return;
-    accessoriesGrid.style.display = currentFilter === 'Items' ? 'flex' : 'none';
-    if (emotesGrid) emotesGrid.style.display = currentFilter === 'Emotes' ? 'flex' : 'none';
-    if (animationsGrid) animationsGrid.style.display = currentFilter === 'Animations' ? 'flex' : 'none';
+    accessoriesGrid.style.display = filter === 'items' ? 'flex' : 'none';
+    if (emotesGrid)
+        emotesGrid.style.display = filter === 'emotes' ? 'flex' : 'none';
+    if (animationsGrid)
+        animationsGrid.style.display =
+            filter === 'animations' ? 'flex' : 'none';
     if (bodyPartsGrid) {
-        bodyPartsGrid.style.display = currentFilter === 'Body Parts' ? 'flex' : 'none';
+        bodyPartsGrid.style.display = filter === 'bodyParts' ? 'flex' : 'none';
     }
     const container = accessoriesGrid.parentElement;
     if (container) container.scrollLeft = 0;
 }
 
-function createCategorizedWearingSection() {
+function getWearingCacheEntry(userId = activeWearingUserId) {
+    if (!userId) return null;
+    return wearingSectionCache.get(String(userId)) || null;
+}
+
+function setCategorizedSectionRefs(section) {
+    accessoriesGrid = section.querySelector('.rovalra-category-grid.wearables');
+    emotesGrid = section.querySelector('.rovalra-category-grid.emotes');
+    animationsGrid = section.querySelector('.rovalra-category-grid.animations');
+    bodyPartsGrid = section.querySelector('.rovalra-category-grid.body-parts');
+    pillToggleWrapper = section.querySelector('.rovalra-pill-wrapper');
+    totalPriceElement = section.querySelector('#rovalra-wearing-total-price');
+}
+
+function getCategoriesFromSection(section) {
+    const categories = new Set();
+    if (
+        section.querySelector('.rovalra-category-grid.wearables')?.children
+            .length
+    ) {
+        categories.add('items');
+    }
+    if (
+        section.querySelector('.rovalra-category-grid.body-parts')?.children
+            .length
+    ) {
+        categories.add('bodyParts');
+    }
+    if (
+        section.querySelector('.rovalra-category-grid.animations')?.children
+            .length
+    ) {
+        categories.add('animations');
+    }
+    if (
+        section.querySelector('.rovalra-category-grid.emotes')?.children.length
+    ) {
+        categories.add('emotes');
+    }
+    return categories;
+}
+
+function restoreCachedWearingSection(userId, content, cached) {
+    if (!cached?.section || !content) return false;
+
+    const existingSection = document.getElementById(
+        'rovalra-main-categorized-wrapper',
+    );
+    if (existingSection && existingSection !== cached.section) {
+        existingSection.remove();
+    }
+
+    setCategorizedSectionRefs(cached.section);
+    discoveredCategories.clear();
+    const categories =
+        cached.categories?.size > 0
+            ? cached.categories
+            : getCategoriesFromSection(cached.section);
+    categories.forEach((category) => discoveredCategories.add(category));
+
+    currentFilter =
+        cached.currentFilter && discoveredCategories.has(cached.currentFilter)
+            ? cached.currentFilter
+            : discoveredCategories.has('items')
+              ? 'items'
+              : Array.from(discoveredCategories)[0] || 'items';
+
+    const originalWearing = content.querySelector(
+        '.profile-currently-wearing, .roseal-currently-wearing',
+    );
+    if (!cached.section.isConnected) {
+        if (originalWearing) {
+            originalWearing.before(cached.section);
+            hideOriginalWearingSection(originalWearing);
+        } else {
+            content.prepend(cached.section);
+        }
+    }
+
+    updateTabVisibility(currentFilter);
+    recalculateTotalPrice();
+    activeWearingUserId = String(userId);
+    return true;
+}
+
+export function createCategorizedWearingSection() {
+    totalPrice = 0;
+    processedBundleIds.clear();
+    totalPriceElement = null;
+    accessoriesGrid = null;
+    emotesGrid = null;
+    animationsGrid = null;
+    bodyPartsGrid = null;
+    pillToggleWrapper = null;
+    discoveredCategories.clear();
     const section = document.createElement('div');
-    section.className = 'section rovalra-container'; 
-    section.style.cssText = 'margin-bottom: 24px; display: block; width: 100%; clear: both; float: none;';
+    section.className = 'section rovalra-container';
+    section.style.cssText =
+        'margin-bottom: 24px; display: block; width: 100%; clear: both; float: none;';
 
     const header = document.createElement('div');
     header.className = 'container-header';
-    header.style.cssText = 'display: flex; margin-bottom: 12px; width: 100%; align-items: center;';
+    header.style.cssText =
+        'display: flex; margin-bottom: 12px; width: 100%; align-items: center;';
 
     const title = document.createElement('h2');
-    title.textContent = 'Currently Wearing';
+    title.textContent = ts('categorizeWearing.currentlyWearing');
     title.style.margin = '0';
 
     totalPriceElement = document.createElement('div');
     totalPriceElement.id = 'rovalra-wearing-total-price';
-    totalPriceElement.style.cssText = 'display: flex; align-items: center; color: var(--rovalra-secondary-text-color); font-size: 16px;';
+    totalPriceElement.style.cssText =
+        'display: flex; align-items: center; color: var(--rovalra-secondary-text-color); font-size: 16px;';
 
     const spacer = document.createElement('div');
     spacer.style.flexGrow = '1';
-    
+
     pillToggleWrapper = document.createElement('div');
     pillToggleWrapper.className = 'rovalra-pill-wrapper';
     header.append(title, totalPriceElement, spacer, pillToggleWrapper);
-    
+
     const scrollWrapper = document.createElement('div');
     scrollWrapper.className = 'rovalra-scroll-wrapper';
-    scrollWrapper.style.cssText = 'position: relative; width: 100%; display: flex; align-items: center;';
+    scrollWrapper.style.cssText =
+        'position: relative; width: 100%; display: flex; align-items: center;';
 
     const scrollContainer = document.createElement('div');
     scrollContainer.className = 'rovalra-items-scroll-container';
-    scrollContainer.style.cssText = 'overflow-x: auto; scroll-behavior: smooth; padding: 10px 0; flex-grow: 1; display: block;';
+    scrollContainer.style.cssText =
+        'overflow-x: auto; scroll-behavior: smooth; padding: 10px 0; flex-grow: 1; display: block;';
 
     accessoriesGrid = document.createElement('div');
     accessoriesGrid.className = 'rovalra-category-grid wearables';
-    accessoriesGrid.style.cssText = 'display: flex; flex-wrap: nowrap; gap: 12px; width: max-content; min-width: 100%;';
-    
+    accessoriesGrid.style.cssText =
+        'display: flex; flex-wrap: nowrap; gap: 12px; width: max-content; min-width: 100%;';
+
     scrollContainer.append(accessoriesGrid);
 
     if (isEmotesCategoryEnabled) {
         emotesGrid = document.createElement('div');
         emotesGrid.className = 'rovalra-category-grid emotes';
-        emotesGrid.style.cssText = 'display: none; flex-wrap: nowrap; gap: 12px; width: max-content; min-width: 100%;';
+        emotesGrid.style.cssText =
+            'display: none; flex-wrap: nowrap; gap: 12px; width: max-content; min-width: 100%;';
         scrollContainer.append(emotesGrid);
     }
 
     if (isAnimationsCategoryEnabled) {
         animationsGrid = document.createElement('div');
         animationsGrid.className = 'rovalra-category-grid animations';
-        animationsGrid.style.cssText = 'display: none; flex-wrap: nowrap; gap: 12px; width: max-content; min-width: 100%;';
+        animationsGrid.style.cssText =
+            'display: none; flex-wrap: nowrap; gap: 12px; width: max-content; min-width: 100%;';
         scrollContainer.append(animationsGrid);
     }
 
     if (isBodyPartsCategoryEnabled) {
         bodyPartsGrid = document.createElement('div');
         bodyPartsGrid.className = 'rovalra-category-grid body-parts';
-        bodyPartsGrid.style.cssText = 'display: none; flex-wrap: nowrap; gap: 12px; width: max-content; min-width: 100%;';
+        bodyPartsGrid.style.cssText =
+            'display: none; flex-wrap: nowrap; gap: 12px; width: max-content; min-width: 100%;';
         scrollContainer.append(bodyPartsGrid);
     }
 
     const { leftButton, rightButton } = createScrollButtons({
-        onLeftClick: () => { scrollContainer.scrollLeft -= 600; },
-        onRightClick: () => { scrollContainer.scrollLeft += 600; }
+        onLeftClick: () => {
+            scrollContainer.scrollLeft -= 600;
+        },
+        onRightClick: () => {
+            scrollContainer.scrollLeft += 600;
+        },
     });
 
     leftButton.classList.add('rovalra-scroll-btn', 'left');
     rightButton.classList.add('rovalra-scroll-btn', 'right');
-    scrollContainer.addEventListener('scroll', () => updateScrollButtonStates(scrollContainer, leftButton, rightButton));
+    scrollContainer.addEventListener('scroll', () =>
+        updateScrollButtonStates(scrollContainer, leftButton, rightButton),
+    );
 
     scrollWrapper.append(leftButton, scrollContainer, rightButton);
     section.append(header, scrollWrapper);
     return section;
 }
 
-function addItemToCategoryView(itemEl, assetId) {
-    if (itemEl.dataset.rovalraCategorized === 'true') return;
-    const info = assetInfoCache.get(assetId);
-    if (!info || !accessoriesGrid) return;
-    const category = getCategoryName(info.assetType.id);
-    let targetGrid;
-    switch (category) {
-        case 'Emotes': targetGrid = emotesGrid; break;
-        case 'Animations': targetGrid = animationsGrid; break;
-        case 'Body Parts': targetGrid = bodyPartsGrid; break;
-        default: targetGrid = accessoriesGrid;
+function getAvatarAssetEntries(avatarData) {
+    const entries = [];
+    const seenIds = new Set();
+
+    (avatarData?.assets || []).forEach((asset) => {
+        const id = Number(asset.id);
+        const typeId = Number(asset.assetType?.id);
+        if (!id || !typeId || seenIds.has(id)) return;
+
+        seenIds.add(id);
+        entries.push({
+            id,
+            typeId,
+        });
+    });
+
+    (avatarData?.emotes || []).forEach((emote) => {
+        const id = Number(emote.assetId);
+        if (!id || seenIds.has(id)) return;
+
+        seenIds.add(id);
+        entries.push({
+            id,
+            typeId: CONSTANT_IDS.EMOTES[0],
+        });
+    });
+
+    return entries;
+}
+
+function hideOriginalWearingSection(wearing) {
+    if (!wearing) return;
+    wearing.style.cssText =
+        'display: none !important; height: 0px !important; margin: 0px !important; padding: 0px !important; opacity: 0 !important; pointer-events: none !important;';
+}
+
+function ensureCategorizedSection(content) {
+    let categorizedSection = document.getElementById(
+        'rovalra-main-categorized-wrapper',
+    );
+    if (categorizedSection) {
+        setCategorizedSectionRefs(categorizedSection);
+        return categorizedSection;
     }
 
-    const exists = Array.from(targetGrid.children).some(child => 
-        child.dataset.rovalraPendingId == assetId || 
-        child.querySelector(`a[href*="/${assetId}/"]`)
+    categorizedSection = createCategorizedWearingSection();
+    categorizedSection.id = 'rovalra-main-categorized-wrapper';
+    if (activeWearingUserId) {
+        wearingSectionCache.set(String(activeWearingUserId), {
+            section: categorizedSection,
+            categories: new Set(),
+            currentFilter,
+        });
+    }
+
+    const originalWearing = content?.querySelector(
+        '.profile-currently-wearing, .roseal-currently-wearing',
+    );
+
+    if (originalWearing) {
+        originalWearing.before(categorizedSection);
+        hideOriginalWearingSection(originalWearing);
+    } else if (content) {
+        content.prepend(categorizedSection);
+    }
+
+    return categorizedSection;
+}
+
+async function loadCurrentlyWearingFromApi(content) {
+    const userId = getUserIdFromUrl();
+    if (!userId) return;
+
+    const cached = wearingSectionCache.get(String(userId));
+    if (restoreCachedWearingSection(userId, content, cached)) return;
+
+    const wrapper = document.getElementById('rovalra-main-categorized-wrapper');
+    if (activeWearingUserId === String(userId) && wrapper) return;
+
+    activeWearingUserId = String(userId);
+    const requestId = ++activeWearingRequestId;
+    if (wrapper) wrapper.remove();
+
+    ensureCategorizedSection(content);
+
+    try {
+        const avatarData = await callRobloxApiJson({
+            subdomain: 'avatar',
+            endpoint: `/v2/avatar/users/${userId}/avatar`,
+        });
+
+        if (
+            requestId !== activeWearingRequestId ||
+            activeWearingUserId !== String(userId)
+        ) {
+            return;
+        }
+
+        const entries = getAvatarAssetEntries(avatarData);
+        if (entries.length === 0) {
+            document
+                .getElementById('rovalra-main-categorized-wrapper')
+                ?.remove();
+            wearingSectionCache.delete(String(userId));
+            return;
+        }
+
+        entries.forEach((entry) => {
+            assetInfoCache.set(entry.id, {
+                id: entry.id,
+                assetType: { id: entry.typeId },
+            });
+            addItemToCategoryView(null, entry.id);
+        });
+
+        const cacheEntry = wearingSectionCache.get(String(userId));
+        if (cacheEntry) {
+            cacheEntry.categories = new Set(discoveredCategories);
+            cacheEntry.currentFilter = currentFilter;
+        }
+    } catch (e) {
+        console.error(
+            'RoValra: Failed to load currently wearing avatar data',
+            e,
+        );
+        document.getElementById('rovalra-main-categorized-wrapper')?.remove();
+        wearingSectionCache.delete(String(userId));
+        activeWearingUserId = null;
+    }
+}
+
+export function addItemToCategoryView(itemEl, assetId) {
+    if (itemEl && itemEl.dataset.rovalraCategorized === 'true') return;
+    const info = assetInfoCache.get(assetId);
+    if (!accessoriesGrid) return;
+    const category = info ? getCategoryName(info.assetType.id) : 'items';
+    let targetGrid;
+    switch (category) {
+        case 'emotes':
+            targetGrid = emotesGrid;
+            break;
+        case 'animations':
+            targetGrid = animationsGrid;
+            break;
+        case 'bodyParts':
+            targetGrid = bodyPartsGrid;
+            break;
+        default:
+            targetGrid = accessoriesGrid;
+    }
+
+    const exists = Array.from(targetGrid.children).some(
+        (child) =>
+            child.dataset.rovalraPendingId == assetId ||
+            child.querySelector(`a[href*="/${assetId}/"]`),
     );
 
     if (!exists) {
-        itemEl.dataset.rovalraCategorized = 'true';
-        const card = createItemCard(assetId, {}, { cardStyles: { width: '150px', flexShrink: 0 } });
+        if (itemEl) itemEl.dataset.rovalraCategorized = 'true';
+        const thumbnailData = getOriginalThumbnailData(itemEl, assetId);
+        const card = createItemCard(assetId, {
+            thumbnailData,
+        });
         card.dataset.rovalraPendingId = assetId;
         targetGrid.appendChild(card);
         if (!discoveredCategories.has(category)) {
             discoveredCategories.add(category);
+            const cacheEntry = getWearingCacheEntry();
+            if (cacheEntry) {
+                cacheEntry.categories.add(category);
+                cacheEntry.currentFilter = currentFilter;
+            }
             refreshPillToggle();
         }
         const container = targetGrid.parentElement;
-        updateScrollButtonStates(container, container.parentElement.querySelector('.left'), container.parentElement.querySelector('.right'));
+        updateScrollButtonStates(
+            container,
+            container.parentElement.querySelector('.left'),
+            container.parentElement.querySelector('.right'),
+        );
+        recalculateTotalPrice();
     }
-    itemEl.style.display = 'none';
-}
-
-function handleItemDetection(itemEl) {
-    if (itemEl.closest('.profile-store')) return; 
-    const link = itemEl.querySelector('a.item-card-link');
-    if (!link) return;
-    const match = link.getAttribute('href')?.match(/\/(catalog|bundles)\/(\d+)\//);
-    if (!match) return;
-    const assetId = parseInt(match[2]);
-    if (assetInfoCache.has(assetId)) addItemToCategoryView(itemEl, assetId);
-    else {
-        if (!pendingItems.has(assetId)) pendingItems.set(assetId, []);
-        pendingItems.get(assetId).push(itemEl);
-    }
+    if (itemEl) itemEl.style.display = 'none';
 }
 
 export async function init() {
-    const result = await new Promise(resolve => chrome.storage.local.get(['categorizeWearingEnabled', 'CategorizeBodyParts', 'CategorizeAnimations', 'CategorizeEmotes'], resolve));
+    const result = await new Promise((resolve) =>
+        chrome.storage.local.get(
+            [
+                'categorizeWearingEnabled',
+                'CategorizeBodyParts',
+                'CategorizeAnimations',
+                'CategorizeEmotes',
+            ],
+            resolve,
+        ),
+    );
     if (!result.categorizeWearingEnabled) return;
 
     isBodyPartsCategoryEnabled = result.CategorizeBodyParts !== false;
@@ -338,37 +711,54 @@ export async function init() {
 
     await loadAssetTypeIds();
 
-    observeElement('.profile-tab-content', (content) => {
-        if (document.getElementById('rovalra-main-categorized-wrapper')) return;
-        
-        const originalWearing = content.querySelector('.profile-currently-wearing, .roseal-currently-wearing');
+    observeElement(
+        '.profile-tab-content',
+        (content) => {
+            const originalWearing = content.querySelector(
+                '.profile-currently-wearing, .roseal-currently-wearing',
+            );
 
-        if (originalWearing) {
-            const categorizedSection = createCategorizedWearingSection();
-            categorizedSection.id = 'rovalra-main-categorized-wrapper';
-            originalWearing.before(categorizedSection);
-            originalWearing.style.cssText = 'display: none !important; height: 0px !important; margin: 0px !important; padding: 0px !important; opacity: 0 !important; pointer-events: none !important;';
-        }
-    }, { multiple: true });
+            if (originalWearing) {
+                hideOriginalWearingSection(originalWearing);
+            }
 
-    observeElement('.profile-currently-wearing, .roseal-currently-wearing', (wearing) => {
-        wearing.style.cssText = 'display: none !important; height: 0px !important; margin: 0px !important; padding: 0px !important; opacity: 0 !important; pointer-events: none !important;';
-        if (!document.getElementById('rovalra-main-categorized-wrapper')) {
-             const categorizedSection = createCategorizedWearingSection();
-             categorizedSection.id = 'rovalra-main-categorized-wrapper';
-             wearing.before(categorizedSection);
-        }
-    }, { multiple: true });
+            loadCurrentlyWearingFromApi(content);
+        },
+        { multiple: true },
+    );
+
+    observeElement(
+        '.profile-currently-wearing, .roseal-currently-wearing',
+        (wearing) => {
+            hideOriginalWearingSection(wearing);
+            const content = wearing.closest('.profile-tab-content');
+            if (content) loadCurrentlyWearingFromApi(content);
+        },
+        { multiple: true },
+    );
 
     window.addEventListener('rovalra-catalog-details', (e) => {
         const data = e.detail?.data;
         if (!Array.isArray(data)) return;
-        data.forEach(item => {
-            const typeId = item.assetType || item.assetTypeId;
+        data.forEach((item) => {
+            let typeId = item.assetType || item.assetTypeId;
+            if (typeId && typeof typeId === 'object') {
+                typeId = typeId.id;
+            }
             if (item.id && typeId) {
-                assetInfoCache.set(item.id, { id: item.id, assetType: { id: typeId } });
+                assetInfoCache.set(item.id, {
+                    id: item.id,
+                    assetType: { id: typeId },
+                });
                 if (pendingItems.has(item.id)) {
-                    pendingItems.get(item.id).forEach(el => addItemToCategoryView(el, item.id));
+                    const elements = pendingItems.get(item.id);
+                    if (elements.length === 0) {
+                        addItemToCategoryView(null, item.id);
+                    } else {
+                        elements.forEach((el) =>
+                            addItemToCategoryView(el, item.id),
+                        );
+                    }
                     pendingItems.delete(item.id);
                 }
             }
@@ -401,25 +791,22 @@ export async function init() {
         .rovalra-scroll-btn.right { right: 5px; }
         .rovalra-scroll-btn.rovalra-btn-disabled { opacity: 0.25 !important; cursor: default; pointer-events: auto; }
     `;
+    document.body.style.overflowX = 'hidden';
     document.head.appendChild(hideStyle);
 
-    const selectors = [
-        '.profile-currently-wearing [id="collection-carousel-item"]', 
-        '.profile-currently-wearing .carousel-item',
-        '.roseal-currently-wearing [id="collection-carousel-item"]'
-    ];
-    selectors.forEach(selector => {
-        observeElement(selector, (item) => {
-            if (!item.dataset.rovalraProcessed) {
-                item.dataset.rovalraProcessed = "true";
-                handleItemDetection(item);
-            }
-                    const debouncedRecalculate = debounce(recalculateTotalPrice, 250);
-
-        observeElement('.rovalra-category-grid .rovalra-item-card', debouncedRecalculate, {
+    const debouncedRecalculate = debounce(recalculateTotalPrice, 250);
+    observeElement(
+        '.rovalra-category-grid .rovalra-item-card',
+        debouncedRecalculate,
+        {
             multiple: true,
-            onRemove: debouncedRecalculate
-        });
-        }, { multiple: true });
+            onRemove: debouncedRecalculate,
+        },
+    );
+
+    window.addEventListener('popstate', () => {
+        activeWearingUserId = null;
+        const content = document.querySelector('.profile-tab-content');
+        if (content) loadCurrentlyWearingFromApi(content);
     });
 }

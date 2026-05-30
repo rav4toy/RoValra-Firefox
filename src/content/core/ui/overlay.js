@@ -95,7 +95,7 @@ export function createOverlay({
     }
 
     overlay.appendChild(content);
-    document.body.appendChild(overlay);
+    (document.body || document.documentElement).appendChild(overlay);
     document.body.style.overflow = 'hidden';
 
     const close = () => {

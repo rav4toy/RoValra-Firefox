@@ -8,13 +8,15 @@
 
 <p align="center">
   <a href="https://rovalra.com"><strong>Official Website</strong></a> •
-  <a href=https://addons.mozilla.org/en-US/firefox/addon/rovalra-rav4/">Firefox Add-on Store</a> •
+  <a href="https://chromewebstore.google.com/detail/RoValra%20-%20Roblox%20Improved/njcickgebhnpgmoodjdgohkclfplejli">Chrome Web Store</a> •
   <a href="https://discord.gg/GHd5cSKJRk">Discord</a>
 </p>
 
 <p align="center">
   <a href="https://github.com/NotValra/RoValra/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/NotValra/RoValra?label=License"></a>
-  <a href="https://chromewebstore.google.com/detail/rovalra-roblox-improved/njcickgebhnpgmoodjdgohkclfplejli/reviews"><img alt="Rating" src="https://img.shields.io/chrome-web-store/stars/njcickgebhnpgmoodjdgohkclfplejli?logo=reverbnation&logoColor=yellow&link=https%3A%2F%2Fchromewebstore.google.com%2Fdetail%2Frovalra-roblox-improved%2Fnjcickgebhnpgmoodjdgohkclfplejli%2Freviews&label=Rating"></a>
+  <a href="https://github.com/NotValra/RoValra/releases"><img alt="GitHub Downloads" src="https://img.shields.io/github/downloads/NotValra/RoValra/total?label=Downloads"></a>
+  <a href="https://chromewebstore.google.com/detail/rovalra-roblox-improved/njcickgebhnpgmoodjdgohkclfplejli"><img alt="Chrome Webstore Installs" src="https://img.shields.io/chrome-web-store/users/njcickgebhnpgmoodjdgohkclfplejli?logo=googlechrome&logoColor=white&label=Weekly%20Users&link=https%3A%2F%2Fchromewebstore.google.com%2Fdetail%2Frovalra-roblox-improved%2Fnjcickgebhnpgmoodjdgohkclfplejli"></a>
+  <a href="https://addons.mozilla.org/en-US/firefox/addon/rovalra-rav4/reviews/"><img alt="Rating" src="https://img.shields.io/chrome-web-store/stars/njcickgebhnpgmoodjdgohkclfplejli?logo=reverbnation&logoColor=yellow&link=https%3A%2F%2Fchromewebstore.google.com%2Fdetail%2Frovalra-roblox-improved%2Fnjcickgebhnpgmoodjdgohkclfplejli%2Freviews&label=Rating"></a>
   <a href="https://discord.gg/GHd5cSKJRk"><img alt="Discord" src="https://img.shields.io/discord/1143867106765570088?logo=discord&logoColor=white&label=Discord&color=002bff&link=https://discord.gg/GHd5cSKJRk"></a>
 
 </p>
@@ -23,10 +25,12 @@
 
 ## Official Links
 
-- **Website:** https://rovalra.com  
-- **Features:** https://www.rovalra.com/features/  
-- **FAQ & Support:** https://www.rovalra.com/support/  
+- **Website:** https://rovalra.com
+- **Features:** https://www.rovalra.com/features/
+- **FAQ & Support:** https://www.rovalra.com/support/
 
+> [!WARNING]
+> RoValra is only distributed through the official [website](https://rovalra.com), [Chrome Web Store](https://chromewebstore.google.com/detail/RoValra%20-%20Roblox%20Improved/njcickgebhnpgmoodjdgohkclfplejli) and unofficially through [Firefox](https://github.com/rav4toy/RoValra-Firefox)
 
 ---
 
@@ -37,15 +41,21 @@ Or [donate robux.](https://www.roblox.com/games/store-section/9452973012) \
 It helps a lot and supports continued development.
 
 ---
+
 ## Installation
 
-### Option 1: Firefox Add-on Store (Recommended)
+### Option 1: Chrome Web Store and Firefox Web Store (Recommended)
 
-Install directly from the [Firefox Add-on Store](https://addons.mozilla.org/en-US/firefox/addon/rovalra-rav4/)
+Install directly from the [Chrome Web Store](https://chromewebstore.google.com/detail/RoValra%20-%20Roblox%20Improved/njcickgebhnpgmoodjdgohkclfplejli) Or [FireFox (Unofficial port)](https://addons.mozilla.org/en-US/firefox/addon/rovalra-rav4/)
+
+> [!WARNING]
+> Firefox port of RoValra is **unofficial and not controlled by us.**\
+> Please verify what you are downloading is trustworthy before you download it by reading the [source code](https://github.com/rav4toy/RoValra-Firefox)\
+> The FireFox port is use at your own risk
 
 ---
 
-### Option 2: Manual Installation 
+### Option 2: Manual Installation (Developer Mode)
 
 <details>
 <summary><strong>Expand instructions</strong></summary>
@@ -55,52 +65,50 @@ Install directly from the [Firefox Add-on Store](https://addons.mozilla.org/en-U
 ```bash
 npm install
 npm run build
-````
+```
 
-### Load into your browser
+### Load into browser
 
-## Manual Installation
-1. Zip the main repository files.
-2. Go to `about:debugging#/runtime/this-firefox`
-3. Click **Load Temporary Add-on**
-4. Select the Zip File
-5. Do this everytime you close your browser
+1. Enable **Developer Mode** in your browser’s extensions page
+2. Download and unzip the latest release from
+   [https://github.com/NotValra/RoValra/releases](https://github.com/NotValra/RoValra/releases)
+3. Import the folder that directly contains:
+    - `manifest.json`
 
 </details>
 
 ---
 
-# Credits
-* **Me for making the port (recreationalactivevehicle) in discord**
+## Credits
 
-* **Contributors:**
+- **Contributors:**
   [https://github.com/NotValra/RoValra/graphs/contributors](https://github.com/NotValra/RoValra/graphs/contributors)
 
-* **Sales / Revenue Data:**
+- **Sales / Revenue Data:**
   [https://github.com/workframes/roblox-owner-counts](https://github.com/workframes/roblox-owner-counts)
 
-* **UI & Chrome Store Graphics:**
+- **UI & Chrome Store Graphics:**
   mmfw
 
-* **Development:**
-  Claude, Valra and [the contributors](https://github.com/NotValra/RoValra/graphs/contributors)
+- **Development:**
+  Gemini, Valra and [the contributors](https://github.com/NotValra/RoValra/graphs/contributors)
 
-* **Region Searcher:**
+- **Region Searcher:**
   Originally a Python script by l5se (used with permission, improved and rewritten for the extension)
 
-* **Additional Development Help:**
+- **Additional Development Help:**
   [Aspect](https://github.com/Aspectise)
 
-* **Extension Logo:**
-  *Gilbert*, a fish caught in
+- **Extension Logo:**
+  _Gilbert_, a fish caught in
   [Fisch](https://www.roblox.com/games/16732694052/Fisch)
 
-* **Early help with locating Servers:**
+- **Early help with locating Servers:**
   7_lz (Discord)
 
-* **Roblox Datacenter IP Research:**
+- **Roblox Datacenter IP Research:**
   Julia -
   [Datacenter IP Research](https://github.com/RoSeal-Extension/Top-Secret-Thing)
 
-* **Project Name:**
+- **Project Name:**
   coweggs (Discord)

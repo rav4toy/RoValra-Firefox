@@ -1,9 +1,8 @@
-
-
-let observerInitialized = false; 
-let observationRequests = []; 
-let globalObserver = null; 
+let observerInitialized = false;
+let observationRequests = [];
+let globalObserver = null;
 let attributeListeners = new Map();
+let childListListeners = new Map();
 
 const viewportObservers = new Map();
 const customRootObservers = new WeakMap();
@@ -13,7 +12,7 @@ const resizeCallbacks = new WeakMap();
 
 export function initializeObserver() {
     if (observerInitialized) {
-        return; 
+        return;
     }
 
     globalObserver = new MutationObserver((mutationsList) => {
@@ -24,10 +23,15 @@ export function initializeObserver() {
                 for (const element of [...req.elements]) {
                     if (!document.body.contains(element)) {
                         req.elements.delete(element);
-                        if (typeof req.onRemove === 'function') req.onRemove(element);
+                        if (typeof req.onRemove === 'function')
+                            req.onRemove(element);
                     }
                 }
-            } else if (!req.multiple && req.element && !document.body.contains(req.element)) {
+            } else if (
+                !req.multiple &&
+                req.element &&
+                !document.body.contains(req.element)
+            ) {
                 if (typeof req.onRemove === 'function') req.onRemove();
                 req.element = null;
             }
@@ -35,9 +39,32 @@ export function initializeObserver() {
 
         for (const mutation of mutationsList) {
             if (mutation.type === 'attributes') {
-                const listener = attributeListeners.get(mutation.target);
+                let listener = attributeListeners.get(mutation.target);
+
+                if (!listener) {
+                    for (const [
+                        observedElement,
+                        callback,
+                    ] of attributeListeners) {
+                        if (
+                            observedElement !== mutation.target &&
+                            observedElement.contains(mutation.target)
+                        ) {
+                            listener = callback;
+                            break;
+                        }
+                    }
+                }
+
                 if (listener) listener(mutation);
                 continue;
+            }
+
+            if (mutation.type === 'childList') {
+                const listeners = childListListeners.get(mutation.target);
+                if (listeners) {
+                    for (const listener of listeners) listener(mutation);
+                }
             }
 
             if (mutation.addedNodes.length === 0) continue;
@@ -53,7 +80,9 @@ export function initializeObserver() {
                             req.element = addedNode;
                             req.callback(addedNode);
                         } else {
-                            const foundElement = addedNode.querySelector(req.selector);
+                            const foundElement = addedNode.querySelector(
+                                req.selector,
+                            );
                             if (foundElement) {
                                 req.element = foundElement;
                                 req.callback(foundElement);
@@ -62,16 +91,21 @@ export function initializeObserver() {
                     }
 
                     if (req.multiple) {
-                        if (addedNode.matches(req.selector) && !req.elements.has(addedNode)) {
+                        if (
+                            addedNode.matches(req.selector) &&
+                            !req.elements.has(addedNode)
+                        ) {
                             req.elements.add(addedNode);
                             req.callback(addedNode);
                         }
-                        addedNode.querySelectorAll(req.selector).forEach(child => {
-                            if (!req.elements.has(child)) {
-                                req.elements.add(child);
-                                req.callback(child);
-                            }
-                        });
+                        addedNode
+                            .querySelectorAll(req.selector)
+                            .forEach((child) => {
+                                if (!req.elements.has(child)) {
+                                    req.elements.add(child);
+                                    req.callback(child);
+                                }
+                            });
                     }
                 }
             }
@@ -81,8 +115,9 @@ export function initializeObserver() {
     observerInitialized = true;
 }
 
-
 export const observeElement = (selector, callback, options = {}) => {
+    if (!observerInitialized) startObserving();
+
     const isMultiple = options.multiple || false;
 
     const request = {
@@ -91,12 +126,15 @@ export const observeElement = (selector, callback, options = {}) => {
         onRemove: options.onRemove,
         multiple: isMultiple,
         active: true,
-        ...(isMultiple ? { elements: new Set() } : { element: null })
+        disconnect() {
+            this.active = false;
+        },
+        ...(isMultiple ? { elements: new Set() } : { element: null }),
     };
     observationRequests.push(request);
 
     if (isMultiple) {
-        document.querySelectorAll(selector).forEach(element => {
+        document.querySelectorAll(selector).forEach((element) => {
             if (!request.elements.has(element)) {
                 request.elements.add(element);
                 callback(element);
@@ -113,18 +151,50 @@ export const observeElement = (selector, callback, options = {}) => {
     return request;
 };
 
-export const observeAttributes = (element, callback, attributeFilter = []) => {
+export const observeAttributes = (
+    element,
+    callback,
+    attributeFilter = [],
+    options = {},
+) => {
     if (!observerInitialized) initializeObserver();
 
     attributeListeners.set(element, callback);
-    globalObserver.observe(element, { attributes: true, attributeFilter });
+    globalObserver.observe(element, {
+        attributes: true,
+        attributeFilter,
+        subtree: options.subtree || false,
+    });
 
     return {
         disconnect: () => {
             attributeListeners.delete(element);
-        }
+        },
     };
 };
+
+export function observeChildren(element, callback) {
+    if (!observerInitialized) initializeObserver();
+
+    let listeners = childListListeners.get(element);
+    if (!listeners) {
+        listeners = new Set();
+        childListListeners.set(element, listeners);
+    }
+    listeners.add(callback);
+
+    return {
+        disconnect: () => {
+            const activeListeners = childListListeners.get(element);
+            if (!activeListeners) return;
+
+            activeListeners.delete(callback);
+            if (activeListeners.size === 0) {
+                childListListeners.delete(element);
+            }
+        },
+    };
+}
 
 export function observeIntersection(element, callback, options = {}) {
     const root = options.root || null;
@@ -142,23 +212,33 @@ export function observeIntersection(element, callback, options = {}) {
         }
         observer = rootMap.get(optionsKey);
         if (!observer) {
-            observer = new IntersectionObserver((entries) => {
-                entries.forEach(entry => {
-                    const callbacks = intersectionCallbacks.get(entry.target);
-                    if (callbacks) callbacks.forEach(cb => cb(entry));
-                });
-            }, { root, rootMargin, threshold });
+            observer = new IntersectionObserver(
+                (entries) => {
+                    entries.forEach((entry) => {
+                        const callbacks = intersectionCallbacks.get(
+                            entry.target,
+                        );
+                        if (callbacks) callbacks.forEach((cb) => cb(entry));
+                    });
+                },
+                { root, rootMargin, threshold },
+            );
             rootMap.set(optionsKey, observer);
         }
     } else {
         observer = viewportObservers.get(optionsKey);
         if (!observer) {
-            observer = new IntersectionObserver((entries) => {
-                entries.forEach(entry => {
-                    const callbacks = intersectionCallbacks.get(entry.target);
-                    if (callbacks) callbacks.forEach(cb => cb(entry));
-                });
-            }, { root: null, rootMargin, threshold });
+            observer = new IntersectionObserver(
+                (entries) => {
+                    entries.forEach((entry) => {
+                        const callbacks = intersectionCallbacks.get(
+                            entry.target,
+                        );
+                        if (callbacks) callbacks.forEach((cb) => cb(entry));
+                    });
+                },
+                { root: null, rootMargin, threshold },
+            );
             viewportObservers.set(optionsKey, observer);
         }
     }
@@ -181,19 +261,19 @@ export function observeIntersection(element, callback, options = {}) {
                     observer.unobserve(element);
                 }
             }
-        }
+        },
     };
 }
 
 export function observeResize(element, callback, options = {}) {
     const box = options.box || 'content-box';
-    
+
     let observer = resizeObservers.get(box);
     if (!observer) {
         observer = new ResizeObserver((entries) => {
-            entries.forEach(entry => {
+            entries.forEach((entry) => {
                 const callbacks = resizeCallbacks.get(entry.target);
-                if (callbacks) callbacks.forEach(cb => cb(entry));
+                if (callbacks) callbacks.forEach((cb) => cb(entry));
             });
         });
         resizeObservers.set(box, observer);
@@ -217,28 +297,39 @@ export function observeResize(element, callback, options = {}) {
                     observer.unobserve(element);
                 }
             }
-        }
+        },
     };
 }
 
 export function startObserving() {
     if (!observerInitialized) {
-        initializeObserver(); 
+        initializeObserver();
     }
 
     if (!globalObserver) {
-        console.error("RoValra: Observer initialization failed.");
-        return "failed";
+        console.error('RoValra: Observer initialization failed.');
+        return 'failed';
     }
 
+    const observeBody = () => {
+        if (document.body) {
+            globalObserver.observe(document.body, {
+                childList: true,
+                subtree: true,
+            });
+            return true;
+        }
+        return false;
+    };
 
-    if (document.body) {
-        globalObserver.observe(document.body, { childList: true, subtree: true });
-        return "active";
-    } else {
-        window.addEventListener('DOMContentLoaded', () => {
-            globalObserver.observe(document.body, { childList: true, subtree: true });
-        }, { once: true });
-        return "deferred";
-    }
+    if (observeBody()) return 'active';
+
+    const bodyWatcher = new MutationObserver((_, obs) => {
+        if (observeBody()) {
+            obs.disconnect();
+        }
+    }); // Verified
+    bodyWatcher.observe(document.documentElement, { childList: true });
+
+    return 'waiting-for-body';
 }
