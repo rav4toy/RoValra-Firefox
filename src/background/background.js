@@ -1102,32 +1102,99 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             sendResponse({ success: true });
             return false;
 
-        case 'checkPermission':
-            chrome.permissions.contains(
-                { permissions: [].concat(request.permission) },
-                (granted) => {
-                    sendResponse({ granted });
-                },
-            );
-            return true;
+        case 'checkPermission': {
+            const permissions = [].concat(request.permission)
+                .map((perm) => (perm === 'contextMenus' ? 'menus' : perm))
+                .filter(Boolean);
 
-        case 'requestPermission':
-            chrome.permissions.request(
-                { permissions: [].concat(request.permission) },
-                (granted) => {
-                    if (chrome.runtime.lastError)
-                        console.warn(
-                            'RoValra: Permission request failed:',
-                            chrome.runtime.lastError,
-                        );
-                    sendResponse({ granted: !!granted });
-                },
-            );
-            return true;
+            if (permissions.includes('menus')) {
+                sendResponse({ granted: true });
+                return false;
+            }
 
-        case 'revokePermission':
+            chrome.permissions.contains({ permissions }, (granted) => {
+                sendResponse({ granted });
+            });
+            return true;
+        }
+
+        case 'requestPermission': {
+            const permissions = [].concat(request.permission)
+                .map((perm) => (perm === 'contextMenus' ? 'menus' : perm))
+                .filter(Boolean);
+            const needsPrompt = permissions.filter((perm) => perm !== 'menus');
+
+            if (needsPrompt.length === 0) {
+                sendResponse({ granted: true });
+                return false;
+            }
+
+            (async () => {
+                const requestId =
+                    'perm_' +
+                    Date.now() +
+                    '_' +
+                    Math.random().toString(36).slice(2);
+                const pageUrl = chrome.runtime.getURL(
+                    'public/Assets/permission_request.html?permissions=' +
+                        encodeURIComponent(JSON.stringify(needsPrompt)) +
+                        '&requestId=' +
+                        encodeURIComponent(requestId),
+                );
+
+                const resultPromise = new Promise((resolve) => {
+                    function resultListener(msg, _sender, respond) {
+                        if (
+                            msg.action === 'permissionRequestResult' &&
+                            msg.requestId === requestId
+                        ) {
+                            chrome.runtime.onMessage.removeListener(
+                                resultListener,
+                            );
+                            resolve(!!msg.granted);
+                            if (typeof respond === 'function') respond({});
+                            return true;
+                        }
+                    }
+
+                    chrome.runtime.onMessage.addListener(resultListener);
+                    setTimeout(() => {
+                        chrome.runtime.onMessage.removeListener(resultListener);
+                        resolve(false);
+                    }, 300000);
+                });
+
+                try {
+                    chrome.windows.create({
+                        url: pageUrl,
+                        type: 'popup',
+                        width: 480,
+                        height: 340,
+                    });
+                } catch (err) {
+                    chrome.tabs.create({ url: pageUrl });
+                }
+
+                sendResponse({ granted: await resultPromise });
+            })();
+            return true;
+        }
+
+        case 'revokePermission': {
+            const permissions = [].concat(request.permission)
+                .map((perm) => (perm === 'contextMenus' ? 'menus' : perm))
+                .filter(Boolean);
+            const removablePermissions = permissions.filter(
+                (perm) => perm !== 'menus',
+            );
+
+            if (removablePermissions.length === 0) {
+                sendResponse({ revoked: false });
+                return false;
+            }
+
             chrome.permissions.remove(
-                { permissions: [].concat(request.permission) },
+                { permissions: removablePermissions },
                 (removed) => {
                     if (chrome.runtime.lastError) {
                         sendResponse({
@@ -1140,6 +1207,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 },
             );
             return true;
+        }
 
         case 'updateUserId':
             if (request.userId && request.userId !== state.currentUserId) {

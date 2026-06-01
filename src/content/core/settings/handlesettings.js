@@ -1157,10 +1157,17 @@ export function updateConditionalSettingsVisibility(
     });
 }
 
+function normalizePermissionList(permission) {
+    return [].concat(permission)
+        .map((perm) => (perm === 'contextMenus' ? 'menus' : perm))
+        .filter(Boolean);
+}
+
 async function hasPermission(permission) {
+    const normalizedPermission = normalizePermissionList(permission);
     return new Promise((resolve) => {
         chrome.runtime.sendMessage(
-            { action: 'checkPermission', permission: permission },
+            { action: 'checkPermission', permission: normalizedPermission },
             (response) => {
                 if (chrome.runtime.lastError) {
                     console.error(
@@ -1176,13 +1183,14 @@ async function hasPermission(permission) {
 }
 
 async function requestPermission(permission) {
+    const normalizedPermission = normalizePermissionList(permission);
     return new Promise((resolve) => {
         chrome.runtime.sendMessage(
-            { action: 'requestPermission', permission: permission },
+            { action: 'requestPermission', permission: normalizedPermission },
             (response) => {
                 if (chrome.runtime.lastError) {
                     console.warn(
-                        `RoValra: Permission request for '${permission}' failed or was dismissed:`,
+                        `RoValra: Permission request for '${normalizedPermission.join(', ')}' failed or was dismissed:`,
                         chrome.runtime.lastError.message,
                     );
                     resolve(false);
@@ -1194,13 +1202,14 @@ async function requestPermission(permission) {
 }
 
 async function revokePermission(permission) {
+    const normalizedPermission = normalizePermissionList(permission);
     return new Promise((resolve) => {
         chrome.runtime.sendMessage(
-            { action: 'revokePermission', permission: permission },
+            { action: 'revokePermission', permission: normalizedPermission },
             (response) => {
                 if (chrome.runtime.lastError) {
                     console.error(
-                        `RoValra: Failed to revoke '${permission}' permission:`,
+                        `RoValra: Failed to revoke '${normalizedPermission.join(', ')}' permission:`,
                         chrome.runtime.lastError.message,
                     );
                     resolve(false);
