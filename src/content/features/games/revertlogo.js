@@ -186,6 +186,20 @@ async function fetchUserPresence(userId) {
     }
 }
 
+
+function countryCodeToUnicodeFlag(countryCode) {
+    const code = String(countryCode || '')
+        .trim()
+        .toUpperCase()
+        .split('-')[0];
+
+    if (!/^[A-Z]{2}$/.test(code)) return '';
+
+    return [...code]
+        .map((char) => String.fromCodePoint(0x1f1e6 + char.charCodeAt(0) - 65))
+        .join('');
+}
+
 const buildInfoList = (
     gameId,
     isPrivateServer,
@@ -229,11 +243,11 @@ const buildInfoList = (
     }
 
     if (regionCode && regionName) {
-        const flagCountryCode = regionCode.toLowerCase().split('-')[0];
-        const flagUrl = `https://flagcdn.com/w20/${flagCountryCode}.png`;
-        listItems.push(
-            `<li ${liClass}><img src="${flagUrl}" alt="${regionCode}"> ${regionName}</li>`,
-        );
+        const flagEmoji = countryCodeToUnicodeFlag(regionCode);
+        const flagHtml = flagEmoji
+            ? `<span class="rovalra-unicode-flag" style="display:inline-block;width:20px;text-align:center;margin-right:4px;">${flagEmoji}</span>`
+            : '';
+        listItems.push(`<li ${liClass}>${flagHtml} ${regionName}</li>`);
     }
 
     if (placeVersion)
