@@ -20,6 +20,7 @@ import {
 } from '../../../core/utils/markdown.js';
 import { migrateLegacyStatus } from '../../../core/profile/descriptionhandler.js';
 import DOMPurify from 'dompurify';
+import { fetchAssetAsDataUrl } from '../../../core/firefox/compat.js';
 import {
     TRUSTED_USER_IDS,
     ARTIST_USER_IDS,
@@ -58,6 +59,65 @@ function cleanupStatusElements(container) {
 
 const downloadableExtensions =
     /\.(zip|rar|7z|tar|gz|exe|msi|dmg|iso|apk|ahk|ps1|cmd|bat|cmd|com|scr|cpl|sys|dll|js|jse|vbs|vbe|wsf|wsh|ps1|psm1|psd1|sh|docm|xlsm|pptm|dotm|xltm|deb|rpm|pkg|appimage|hta|jar|class)$/i;
+
+const statusImageProxyCache = new Map();
+
+function shouldProxyStatusImage(src) {
+    if (!src || typeof src !== 'string') return false;
+    const trimmed = src.trim();
+    if (/^(data:|blob:|moz-extension:|chrome-extension:)/i.test(trimmed)) return false;
+    try {
+        const url = new URL(trimmed, window.location.href);
+        return url.protocol === 'https:' || url.protocol === 'http:';
+    } catch (e) {
+        return false;
+    }
+}
+
+async function proxyStatusImage(src) {
+    if (!shouldProxyStatusImage(src)) return src;
+    if (statusImageProxyCache.has(src)) return statusImageProxyCache.get(src);
+    const promise = fetchAssetAsDataUrl(src).catch(() => '');
+    statusImageProxyCache.set(src, promise);
+    return promise;
+}
+
+async function sanitizeTrustedStatusMarkdown(text) {
+    const cleanHtml = DOMPurify.sanitize(parseMarkdown(text), {
+        FORBID_ATTR: ['style'],
+        FORBID_TAGS: ['audio'],
+    });
+
+    const template = document.createElement('template');
+    template.innerHTML = cleanHtml;
+
+    const images = Array.from(template.content.querySelectorAll('img[src]'));
+    await Promise.all(
+        images.map(async (img) => {
+            const originalSrc = img.getAttribute('src');
+            if (!shouldProxyStatusImage(originalSrc)) return;
+            const proxiedSrc = await proxyStatusImage(originalSrc);
+            if (proxiedSrc) {
+                img.setAttribute('src', proxiedSrc);
+            } else {
+                img.removeAttribute('src');
+            }
+        }),
+    );
+
+    return template.innerHTML;
+}
+
+async function renderTrustedStatus(target, text) {
+    target.innerHTML = await sanitizeTrustedStatusMarkdown(text);
+
+    const videos = target.querySelectorAll('video');
+    for (const video of videos) {
+        video.muted = true;
+        video.volume = 0;
+        video.play().catch(() => {});
+    }
+}
 
 DOMPurify.addHook('afterSanitizeAttributes', (currentNode) => {
     if (currentNode.tagName === 'A' && currentNode.hasAttribute('href')) {
@@ -220,18 +280,7 @@ async function addStatusBubble(avatarContainer) {
         bubble.className = 'rovalra-status-bubble text-label-medium';
 
         if (isUserTrusted) {
-            bubble.innerHTML = DOMPurify.sanitize(parseMarkdown(statusText), {
-                FORBID_ATTR: ['style'],
-                FORBID_TAGS: ['audio'],
-            });
-
-            const videos = bubble.querySelectorAll('video');
-            for (const video of videos) {
-                video.muted = true;
-                video.volume = 0;
-
-                video.play().catch(() => {});
-            }
+            await renderTrustedStatus(bubble, statusText);
         } else {
             bubble.innerHTML = parseUntrustedMarkdown(statusText); // Verified
         }
@@ -256,21 +305,7 @@ async function addStatusBubble(avatarContainer) {
                     : '...';
 
                 if (isUserTrusted) {
-                    bubble.innerHTML = DOMPurify.sanitize(
-                        parseMarkdown(textToRender),
-                        {
-                            FORBID_ATTR: ['style'],
-                            FORBID_TAGS: ['audio'],
-                        },
-                    );
-
-                    const videos = bubble.querySelectorAll('video');
-                    for (const video of videos) {
-                        video.muted = true;
-                        video.volume = 0;
-
-                        video.play().catch(() => {});
-                    }
+                    await renderTrustedStatus(bubble, textToRender);
                 } else {
                     bubble.innerHTML = parseUntrustedMarkdown(textToRender); // Verified
                 }
@@ -409,13 +444,7 @@ async function addHomeStatusHover(tile) {
                         );
 
                         if (isUserTrusted) {
-                            bubble.innerHTML = DOMPurify.sanitize(
-                                parseMarkdown(statusText),
-                                {
-                                    FORBID_ATTR: ['style'],
-                                    FORBID_TAGS: ['audio'],
-                                },
-                            );
+                            await renderTrustedStatus(bubble, statusText);
                         } else {
                             bubble.innerHTML = parseUntrustedMarkdown(
                                 statusText,

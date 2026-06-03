@@ -613,7 +613,7 @@ export async function callRobloxApi(options) {
                     await new Promise((res) => setTimeout(res, 1000));
                 }
             }
-            if (!lastResponse.ok) {
+            if (!lastResponse.ok && lastResponse.status !== 499) {
                 console.error(
                     `RoValra API: Request to ${fullUrl} failed with status ${lastResponse.status} after multiple retries.`,
                 );
@@ -664,7 +664,7 @@ export async function callRobloxApi(options) {
             }
         }
 
-        if (!response.ok) {
+        if (!response.ok && response.status !== 499) {
             console.error(
                 `RoValra API: Request to ${fullUrl} failed with status ${response.status}.`,
             );
@@ -679,7 +679,7 @@ export async function callRobloxApi(options) {
 
     if (shouldCache) {
         activeRequests.set(requestKey, requestPromise);
-        requestPromise.finally(() => activeRequests.delete(requestKey));
+        requestPromise.finally(() => activeRequests.delete(requestKey)).catch(() => {});
     }
 
     let originalResponse;

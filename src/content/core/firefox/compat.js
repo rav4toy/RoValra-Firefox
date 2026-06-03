@@ -106,7 +106,7 @@ function needsImageProxy(url) {
     try {
         return (
             typeof url === 'string' &&
-            /^https:\/\/www\.rovalra\.com\/static\/img\//i.test(url.trim())
+            (/(^https:\/\/www\.rovalra\.com\/static\/img\/|^https:\/\/i\.ibb\.co\/)/i).test(url.trim())
         );
     } catch (e) {
         return false;
