@@ -32,7 +32,8 @@
         "https://catalog.rovalra.com/*",
         "https://www.rovalra.com/*",
         "https://*.rbxcdn.com/*",
-        "https://rbxcdn.com/*"
+        "https://rbxcdn.com/*",
+        "https://i.ibb.co/*"
     ],
     "background": {
         "scripts": [
