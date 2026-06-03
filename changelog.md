@@ -1,3 +1,18 @@
+2.5.4.2 Firefox 03/06/2026
+
+&#x20; # Fixes :
+
+* Fixed the "What am I joining" popup by showing country codes instead of flags.
+* Fixed not being able to allow permissions
+* Made it not spam the console when it couldn't find the user/game you were looking up.
+
+&#x20; # Changes :
+
+* Added support for a image hosting site(wasn't showing images in people status).
+* Reduced the size of content.js
+
+
+
 2.5.4.1 Firefox 30/05/2026
 
 &#x20; # Fixes :
