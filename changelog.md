@@ -1,3 +1,12 @@
+2.6.1 Firefox 21/07/2026
+
+&#x20; # Changes:
+
+* hello. been a bit since i kinda updated this so here you go. changed a lot of things and fixed a lot of stuff that were broken in the older vers.
+
+hope you enjoy!
+
+
 2.5.4.2 Firefox 03/06/2026
 
 &#x20; # Fixes :

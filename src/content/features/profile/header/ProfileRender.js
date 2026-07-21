@@ -31,9 +31,9 @@ import { migrateLegacyEnvironment } from '../../../core/profile/descriptionhandl
 import {
     RegisterWrappers,
     RBXRenderer,
+    RBX,
     Instance,
     HumanoidDescriptionWrapper,
-    RBX,
     Outfit,
     API,
     FLAGS,
@@ -45,15 +45,19 @@ import {
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as THREE from 'three';
 import { safeHtml } from '../../../core/packages/dompurify.js';
+import { backgroundRendererRequests } from '../../../core/utils/renderer.js';
 import {
-    fetchBinaryResourceViaBackground,
-    normalizeExternalResourceUrl,
-    isFirefox,
-} from '../../../core/firefox/compat.js';
+    getFirefoxSafeMediaUrl,
+    loadFirefoxSafeCubeTexture,
+    loadFirefoxSafeGltf,
+} from '../../../core/firefox/resources.js';
+import { getBundledRigBuffer } from '../../../core/firefox/bundledRigs.js';
 FLAGS.ENABLE_API_MESH_CACHE = false;
 FLAGS.ENABLE_API_RBX_CACHE = false;
 FLAGS.USE_WORKERS = false;
 FLAGS.ONLINE_ASSETS = true;
+
+backgroundRendererRequests();
 
 let currentRig = null;
 let currentRigType = null;
@@ -67,6 +71,8 @@ let isCustomEnvLoaded = false;
 let environmentConfig = null;
 let activeEmoteId = null;
 const animationSpeed = 1;
+const EFFECT_BLACK_KEY_THRESHOLD = 0.08;
+const EFFECT_BLACK_KEY_SOFTNESS = 0.02;
 
 let isAnimatePatched = false;
 const raycaster = new THREE.Raycaster();
@@ -88,21 +94,53 @@ let autoSwitchObserver = null;
 let animationLoopStarted = false;
 let autoSwitchedProfileUserId = null;
 const resizeObserversByContainer = new WeakMap();
+const blackKeyedEffectMaterials = new WeakSet();
 
-async function getFirefoxSafeMediaUrl(url) {
-    if (!isFirefox() || !url || typeof url !== 'string') return url;
-    if (/^(data:|blob:|moz-extension:|chrome-extension:)/i.test(url)) return url;
-    const normalized = normalizeExternalResourceUrl(url);
-    try {
-        const fetched = await fetchBinaryResourceViaBackground(normalized, { credentials: 'omit' });
-        return fetched.dataUrl || fetched.objectUrl || normalized;
-    } catch (e) {
-        return normalized;
-    }
+function isRoavatarEffectMaterial(material) {
+    return (
+        material?.isShaderMaterial &&
+        typeof material.fragmentShader === 'string' &&
+        material.fragmentShader.includes('uniform sampler2D uAlphaMap') &&
+        material.fragmentShader.includes('varying vec3 vInstanceColor')
+    );
 }
 
-async function loadTextureAsDataUrl(url) {
-    return await getFirefoxSafeMediaUrl(url);
+function keyBlackFromEffectMaterial(material) {
+    if (
+        blackKeyedEffectMaterials.has(material) ||
+        !isRoavatarEffectMaterial(material)
+    ) {
+        return;
+    }
+
+    material.fragmentShader = material.fragmentShader.replace(
+        'gl_FragColor = finalColor;',
+        `
+    float blackKeyValue = max(max(finalColor.r, finalColor.g), finalColor.b);
+    finalColor.a *= smoothstep(
+        ${EFFECT_BLACK_KEY_SOFTNESS.toFixed(3)},
+        ${EFFECT_BLACK_KEY_THRESHOLD.toFixed(3)},
+        blackKeyValue
+    );
+    if (finalColor.a <= 0.001) discard;
+
+    gl_FragColor = finalColor;`,
+    );
+    material.needsUpdate = true;
+    blackKeyedEffectMaterials.add(material);
+}
+
+function keyBlackFromEffectMaterials() {
+    const scene = RBXRenderer.getScene?.();
+    if (!scene) return;
+
+    scene.traverse((object) => {
+        const materials = Array.isArray(object.material)
+            ? object.material
+            : [object.material];
+
+        materials.forEach(keyBlackFromEffectMaterial);
+    });
 }
 
 function constrainCamera() {
@@ -238,11 +276,12 @@ function customAnimate() {
         controls.update();
     }
 
-    let [width, height] = RBXRenderer.resolution
-    RBXRenderer.camera.aspect = width / height
-    RBXRenderer.camera.updateProjectionMatrix()
+    let [width, height] = RBXRenderer.resolution;
+    RBXRenderer.camera.aspect = width / height;
+    RBXRenderer.camera.updateProjectionMatrix();
 
     RBXRenderer.renderer.setRenderTarget(null);
+    keyBlackFromEffectMaterials();
     if (RBXRenderer.effectComposer) {
         RBXRenderer.effectComposer.render();
     } else {
@@ -250,13 +289,13 @@ function customAnimate() {
     }
 
     requestAnimationFrame(() => {
-        customAnimate()
+        customAnimate();
     });
 }
 function patchAnimateForRotation() {
     if (isAnimatePatched) return;
 
-    RBXRenderer.animateAll = customAnimate
+    RBXRenderer.animateAll = customAnimate;
     isAnimatePatched = true;
 }
 function getAnimatorW(rig = currentRig) {
@@ -312,58 +351,64 @@ async function loadRig(rigType) {
     outfit.fromJson(globalAvatarData);
     outfit.playerAvatarType = rigType;
 
-    const rigUrl = chrome.runtime.getURL(`assets/Rig${rigType}.rbxm`);
+    let rigLoadStage = 'copy bundled rig bytes';
 
     try {
-        const rigResult = await API.Asset.GetRBX(rigUrl, undefined);
+        const rigBuffer = getBundledRigBuffer(rigType);
+        rigLoadStage = 'parse bundled rig';
+        const rigResult = new RBX();
+        rigResult.fromBuffer(rigBuffer);
 
-        if (rigResult instanceof RBX) {
-            await new Promise((r) => setTimeout(r, 10));
+        rigLoadStage = 'validate parsed rig';
+        if (!rigResult || typeof rigResult.generateTree !== 'function') {
+            throw new TypeError('RoAvatar returned an invalid parsed rig.');
+        }
 
-            const newRig = rigResult.generateTree().GetChildren()[0];
-            const humanoid = newRig?.FindFirstChildOfClass('Humanoid');
+        await new Promise((r) => setTimeout(r, 10));
 
-            if (humanoid) {
-                const desc = new Instance('HumanoidDescription');
-                const wrapper = new HumanoidDescriptionWrapper(desc);
-                wrapper.fromOutfit(outfit);
+        rigLoadStage = 'generate rig tree';
+        const newRig = rigResult.generateTree().GetChildren()[0];
+        const humanoid = newRig?.FindFirstChildOfClass('Humanoid');
 
-                await new Promise((r) => requestAnimationFrame(r));
-                await wrapper.applyDescription(humanoid);
+        if (humanoid) {
+            rigLoadStage = 'create humanoid description';
+            const desc = new Instance('HumanoidDescription');
+            const wrapper = new HumanoidDescriptionWrapper(desc);
+            wrapper.fromOutfit(outfit);
 
-                if (currentRig) {
-                    currentRig.Destroy();
-                }
+            rigLoadStage = 'apply avatar description';
+            await new Promise((r) => requestAnimationFrame(r));
+            await wrapper.applyDescription(humanoid);
 
-                if (customModelInstance) {
-                    RBXRenderer.getScene().remove(customModelInstance);
-                    customModelInstance = null;
-                }
+            if (currentRig) {
+                currentRig.Destroy();
+            }
 
-                currentRig = newRig;
+            currentRig = newRig;
 
-                await playIdle();
+            rigLoadStage = 'prepare avatar animation';
+            await playIdle();
 
-                if (currentRig.preRender) currentRig.preRender();
-                RBXRenderer.addInstance(currentRig, null);
-                currentRigType = rigType;
+            rigLoadStage = 'register rendered rig';
+            if (currentRig.preRender) currentRig.preRender();
+            RBXRenderer.addInstance(currentRig, null);
+            currentRigType = rigType;
 
-                if (rigType === 'R15' && globalAvatarData.emotes) {
-                    const animatorW = getAnimatorW(currentRig);
-                    for (const emote of globalAvatarData.emotes) {
-                        animatorW?.loadAvatarAnimation(
-                            BigInt(emote.assetId),
-                            true,
-                            false,
-                        );
-                        if (Math.random() > 0.5)
-                            await new Promise((r) => setTimeout(r, 1));
-                    }
+            if (rigType === 'R15' && globalAvatarData.emotes) {
+                const animatorW = getAnimatorW(currentRig);
+                for (const emote of globalAvatarData.emotes) {
+                    animatorW?.loadAvatarAnimation(
+                        BigInt(emote.assetId),
+                        true,
+                        false,
+                    );
+                    if (Math.random() > 0.5)
+                        await new Promise((r) => setTimeout(r, 1));
                 }
             }
         }
     } catch (e) {
-        console.error('Rig Load Error:', e);
+        console.error(`Rig Load Error [${rigLoadStage}]:`, e);
     } finally {
         isRenderingPaused = false;
     }
@@ -1205,6 +1250,7 @@ async function injectCustomButtons(toggleButton) {
                 'swimidle',
                 'toolslash',
                 'toollunge',
+                'mood',
             ];
 
             if (currentRigType === 'R6') {
@@ -1509,59 +1555,46 @@ async function loadCustomEnvironment(scene, config) {
         return;
     }
 
-    return new Promise(async (resolve, reject) => {
+    let envUrl = config.url;
+    try {
+        envUrl = new URL(envUrl).toString();
+    } catch {
+        envUrl = chrome.runtime.getURL(envUrl);
+    }
+    try {
         const loader = new GLTFLoader();
-        let envUrl = normalizeExternalResourceUrl(config.url);
-        try {
-            new URL(envUrl);
-        } catch (e) {
-            envUrl = chrome.runtime.getURL(envUrl);
+        const gltf = await loadFirefoxSafeGltf(loader, envUrl);
+        if (customModelInstance) scene.remove(customModelInstance);
+        customModelInstance = gltf.scene;
+        lastLoadedUrl = config.url;
+        raycastTargets = [];
+        if (config.position)
+            customModelInstance.position.set(...config.position);
+        if (config.scale) customModelInstance.scale.set(...config.scale);
+        customModelInstance.traverse((node) => {
+            if (node.isMesh) {
+                node.userData.isEnvironment = true;
+                if (config.receiveShadow !== undefined)
+                    node.receiveShadow = config.receiveShadow;
+                if (config.castShadow !== undefined)
+                    node.castShadow = config.castShadow;
+                node.matrixAutoUpdate = false;
+                node.updateMatrix();
+                raycastTargets.push(node);
+            }
+        });
+        scene.add(customModelInstance);
+        if (RBXRenderer.plane) {
+            RBXRenderer.plane.visible = false;
         }
-        try {
-            if (isFirefox()) envUrl = await getFirefoxSafeMediaUrl(envUrl);
-        } catch (e) {
-            console.warn('RoValra: Background env fetch failed', e);
+        if (RBXRenderer.shadowPlane) {
+            RBXRenderer.shadowPlane.visible = false;
         }
-        loader.load(
-            envUrl,
-            async (gltf) => {
-                if (customModelInstance) scene.remove(customModelInstance);
-                customModelInstance = gltf.scene;
-                lastLoadedUrl = config.url;
-                raycastTargets = [];
-                if (config.position)
-                    customModelInstance.position.set(...config.position);
-                if (config.scale)
-                    customModelInstance.scale.set(...config.scale);
-                customModelInstance.traverse((node) => {
-                    if (node.isMesh) {
-                        node.userData.isEnvironment = true;
-                        if (config.receiveShadow !== undefined)
-                            node.receiveShadow = config.receiveShadow;
-                        if (config.castShadow !== undefined)
-                            node.castShadow = config.castShadow;
-                        node.matrixAutoUpdate = false;
-                        node.updateMatrix();
-                        raycastTargets.push(node);
-                    }
-                });
-                scene.add(customModelInstance);
-                if (RBXRenderer.plane) {
-                    RBXRenderer.plane.visible = false;
-                }
-                if (RBXRenderer.shadowPlane) {
-                    RBXRenderer.shadowPlane.visible = false;
-                }
-                isCustomEnvLoaded = true;
-                resolve();
-            },
-            undefined,
-            (error) => {
-                console.error('RoValra: GLTF Load Error', error);
-                reject(error);
-            },
-        );
-    });
+        isCustomEnvLoaded = true;
+    } catch (error) {
+        console.error('RoValra: GLTF Load Error', error);
+        throw error;
+    }
 }
 
 function setupAtmosphere(scene, config, isCustomEnv = false) {
@@ -1569,6 +1602,8 @@ function setupAtmosphere(scene, config, isCustomEnv = false) {
 
     if (config.background) {
         scene.background = new THREE.Color(config.background);
+    } else if (!RBXRenderer.backgroundTransparent) {
+        scene.background = new THREE.Color(RBXRenderer.backgroundColorHex);
     } else {
         scene.background = null;
     }
@@ -2004,50 +2039,71 @@ async function preloadAvatar(userId = getUserIdFromUrl()) {
                     }
                     if (matchCount === 6) skyboxUrls = sorted;
 
-                    const rotateSkyboxImage = (url, angle) => {
-                        return new Promise((resolve) => {
-                            const img = new Image();
-                            img.crossOrigin = 'Anonymous';
-                            img.onload = () => {
-                                const canvas = document.createElement('canvas');
-                                canvas.width = img.height;
-                                canvas.height = img.width;
-                                const ctx = canvas.getContext('2d');
-                                ctx.translate(
-                                    canvas.width / 2,
-                                    canvas.height / 2,
-                                );
-                                ctx.rotate((angle * Math.PI) / 180);
-                                ctx.drawImage(
-                                    img,
-                                    -img.width / 2,
-                                    -img.height / 2,
-                                );
-                                resolve(canvas.toDataURL());
-                            };
-                            img.onerror = () => resolve(url);
-                            loadTextureAsDataUrl(url).then((safeUrl) => {
-                                img.src = safeUrl || url;
+                    const firefoxSkybox = await loadFirefoxSafeCubeTexture(
+                        skyboxUrls,
+                        [
+                            {},
+                            {},
+                            { angle: 270 },
+                            { angle: 90 },
+                            {},
+                            {},
+                        ],
+                    );
+
+                    if (firefoxSkybox) {
+                        scene.background = firefoxSkybox;
+                    } else {
+                        skyboxUrls = await Promise.all(
+                            skyboxUrls.map((url) =>
+                                getFirefoxSafeMediaUrl(url),
+                            ),
+                        );
+
+                        const rotateSkyboxImage = (url, angle) => {
+                            return new Promise((resolve) => {
+                                const img = new Image();
+                                img.crossOrigin = 'Anonymous';
+                                img.onload = () => {
+                                    const canvas =
+                                        document.createElement('canvas');
+                                    canvas.width = img.height;
+                                    canvas.height = img.width;
+                                    const ctx = canvas.getContext('2d');
+                                    ctx.translate(
+                                        canvas.width / 2,
+                                        canvas.height / 2,
+                                    );
+                                    ctx.rotate((angle * Math.PI) / 180);
+                                    ctx.drawImage(
+                                        img,
+                                        -img.width / 2,
+                                        -img.height / 2,
+                                    );
+                                    resolve(canvas.toDataURL());
+                                };
+                                img.onerror = () => resolve(url);
+                                img.src = url;
                             });
-                        });
-                    };
+                        };
 
-                    try {
-                        const [up, dn] = await Promise.all([
-                            rotateSkyboxImage(skyboxUrls[2], 270), //top skybox rotation
-                            rotateSkyboxImage(skyboxUrls[3], 90), //bottom skybox rotation
-                        ]);
-                        skyboxUrls[2] = up;
-                        skyboxUrls[3] = dn;
-                    } catch (e) {
-                        console.warn('RoValra: Skybox rotation failed', e);
-                    }
+                        try {
+                            const [up, dn] = await Promise.all([
+                                rotateSkyboxImage(skyboxUrls[2], 270),
+                                rotateSkyboxImage(skyboxUrls[3], 90),
+                            ]);
+                            skyboxUrls[2] = up;
+                            skyboxUrls[3] = dn;
+                        } catch (e) {
+                            console.warn(
+                                'RoValra: Skybox rotation failed',
+                                e,
+                            );
+                        }
 
-                    if (isFirefox()) {
-                        skyboxUrls = await Promise.all(skyboxUrls.map((url) => loadTextureAsDataUrl(url)));
+                        const cubeLoader = new THREE.CubeTextureLoader();
+                        scene.background = cubeLoader.load(skyboxUrls);
                     }
-                    const cubeLoader = new THREE.CubeTextureLoader();
-                    scene.background = cubeLoader.load(skyboxUrls);
                     if (RBXRenderer.plane) RBXRenderer.plane.visible = false;
                     if (RBXRenderer.shadowPlane)
                         RBXRenderer.shadowPlane.visible = false;

@@ -1,11 +1,91 @@
 import { getAssets } from '../../assets.js';
+import { callRobloxApi } from '../../api.js';
 import { SETTINGS_CONFIG } from '../settingConfig.js';
 import { createDropdown } from '../../ui/dropdown.js';
 
+const ACCOUNT_STANDING_TAB_IDS = new Set([
+    'info',
+    'credits',
+    'donatorPerks',
+    'store',
+    'changelogs',
+]);
+
+function isAccountStandingDirectLink() {
+    const rovalraTab = new URLSearchParams(window.location.search).get(
+        'rovalra',
+    );
+    return rovalraTab?.toLowerCase() === 'account standing';
+}
+
+function hasModerationHistory(data) {
+    const appealStatus = data?.appeal?.appeal_status;
+    if (
+        appealStatus !== null &&
+        appealStatus !== undefined &&
+        appealStatus !== 0
+    ) {
+        return true;
+    }
+
+    const moderation = data?.moderation;
+    if (!moderation) return false;
+
+    const status = Number(moderation.moderation_status ?? 0);
+    if (status > 0) return true;
+    if (moderation.moderated_at) return true;
+
+    return (
+        Array.isArray(moderation.moderated_content_history) &&
+        moderation.moderated_content_history.length > 0
+    );
+}
+
+async function shouldShowAccountStandingTab(settings) {
+    if (
+        settings.alwaysShowAccountStandingTab === true ||
+        isAccountStandingDirectLink()
+    ) {
+        return true;
+    }
+
+    try {
+        const response = await callRobloxApi({
+            subdomain: 'apis',
+            endpoint: '/v1/auth/moderation/status',
+            method: 'GET',
+            isRovalraApi: true,
+        });
+
+        if (!response.ok) return false;
+        return hasModerationHistory(await response.json());
+    } catch (error) {
+        console.warn(
+            'RoValra: Failed to check account standing tab visibility',
+            error,
+        );
+        return false;
+    }
+}
+
+function shouldShowStaticTab(item, accountStandingTabVisible) {
+    if (item.id === 'accountStanding') return accountStandingTabVisible;
+    return ACCOUNT_STANDING_TAB_IDS.has(item.id);
+}
+
 function ensureDeveloperSettings() {
     if (!SETTINGS_CONFIG.Developer) {
-        SETTINGS_CONFIG.Developer = { title: 'Developer', settings: {} };
+        SETTINGS_CONFIG.Developer = {
+            title: 'RoValra Developer',
+            settings: {},
+        };
     }
+}
+
+function shouldShowSettingsSection(sectionName, options = {}) {
+    if (sectionName === 'Developer' && !options.devTabAdded) return false;
+    if (sectionName === 'FunStuff' && !options.funStuffTabEnabled) return false;
+    return true;
 }
 
 export async function buildSettingsPage({
@@ -17,10 +97,21 @@ export async function buildSettingsPage({
     initSettings,
 }) {
     const settings = await new Promise((resolve) => {
-        chrome.storage.local.get('alwaysShowDeveloperSettings', resolve);
+        chrome.storage.local.get(
+            [
+                'alwaysShowDeveloperSettings',
+                'FunStuffEnabled',
+                'alwaysShowAccountStandingTab',
+            ],
+            resolve,
+        );
     });
 
     let devTabAdded = settings.alwaysShowDeveloperSettings === true;
+    let funStuffTabEnabled = settings.FunStuffEnabled === true;
+    let accountStandingTabVisible =
+        settings.alwaysShowAccountStandingTab === true ||
+        isAccountStandingDirectLink();
     if (devTabAdded) ensureDeveloperSettings();
     const assets = getAssets();
     const containerMain = document.querySelector('main.container-main');
@@ -53,6 +144,7 @@ export async function buildSettingsPage({
         'display: flex; align-items: center; justify-content: center; margin-bottom: 20px;';
 
     let rovalraIcon = document.createElement('img');
+    rovalraIcon.dataset.rovalraAsset = 'rovalraIcon';
     rovalraIcon.src = assets.rovalraIcon;
     rovalraIcon.style.cssText =
         'width: 35px; height: 35px; margin-left: 5px;  user-select: none;';
@@ -94,13 +186,8 @@ export async function buildSettingsPage({
         const dropdownItems = [];
 
         buttonData
-            .filter(
-                (item) =>
-                    item.id === 'info' ||
-                    item.id === 'credits' ||
-                    item.id === 'donatorPerks' ||
-                    item.id === 'accountStanding' ||
-                    item.id === 'store',
+            .filter((item) =>
+                shouldShowStaticTab(item, accountStandingTabVisible),
             )
             .forEach((item) => {
                 dropdownItems.push({
@@ -110,6 +197,13 @@ export async function buildSettingsPage({
             });
 
         Object.keys(SETTINGS_CONFIG).forEach((sectionName) => {
+            if (
+                !shouldShowSettingsSection(sectionName, {
+                    devTabAdded,
+                    funStuffTabEnabled,
+                })
+            )
+                return;
             dropdownItems.push({
                 value: sectionName.toLowerCase(),
                 label: SETTINGS_CONFIG[sectionName].title,
@@ -202,6 +296,8 @@ export async function buildSettingsPage({
         debounce,
         buttonData,
         devTabAdded,
+        funStuffTabEnabled,
+        accountStandingTabVisible,
         loadTabContent,
         REGIONS,
         initSettings,
@@ -225,8 +321,46 @@ export async function buildSettingsPage({
         }
     });
 
+    document.addEventListener('rovalra:settingSaved', (event) => {
+        if (event.detail?.name === 'FunStuffEnabled') {
+            funStuffTabEnabled = event.detail.value === true;
+            updateFunStuffTabUI({
+                enabled: funStuffTabEnabled,
+                menuList: unifiedMenu,
+                loadTabContent,
+                renderMobileDropdown,
+            });
+            return;
+        }
+
+        if (event.detail?.name === 'alwaysShowAccountStandingTab') {
+            accountStandingTabVisible =
+                event.detail.value === true || isAccountStandingDirectLink();
+            updateAccountStandingTabUI({
+                enabled: accountStandingTabVisible,
+                buttonData,
+                menuList: unifiedMenu,
+                loadTabContent,
+                renderMobileDropdown,
+            });
+        }
+    });
+
     uiContainer.appendChild(unifiedMenu);
     uiContainer.appendChild(contentContainer);
+
+    shouldShowAccountStandingTab(settings)
+        .then((enabled) => {
+            accountStandingTabVisible = enabled;
+            updateAccountStandingTabUI({
+                enabled,
+                buttonData,
+                menuList: unifiedMenu,
+                loadTabContent,
+                renderMobileDropdown,
+            });
+        })
+        .catch(() => {});
 
     return { rovalraHeader, settingsContainer, contentDiv, userAccountDiv };
 }
@@ -244,7 +378,7 @@ function stripInlineStyles(container) {
         '.setting-controls',
         '.setting-label-divider',
         'label',
-        'span',
+        'span:not(.rovalra-markdown-color)',
         'div',
     ];
     const elements = container.querySelectorAll(selectors.join(','));
@@ -260,6 +394,8 @@ function createUnifiedMenu({
     debounce,
     buttonData,
     devTabAdded,
+    funStuffTabEnabled,
+    accountStandingTabVisible,
     loadTabContent,
     REGIONS,
     initSettings,
@@ -321,18 +457,14 @@ function createUnifiedMenu({
     searchListItem.appendChild(searchInput);
     menuList.appendChild(searchListItem);
 
-    const staticItems = buttonData.filter(
-        (item) =>
-            item.id === 'info' ||
-            item.id === 'credits' ||
-            item.id === 'donatorPerks' ||
-            item.id === 'accountStanding' ||
-            item.id === 'store',
+    const staticItems = buttonData.filter((item) =>
+        shouldShowStaticTab(item, accountStandingTabVisible),
     );
     staticItems.forEach((item) => {
         const listItem = document.createElement('li');
         listItem.id = `${item.text.toLowerCase()}-tab`;
         listItem.dataset.text = item.text;
+        listItem.dataset.staticId = item.id;
         listItem.className = 'menu-option';
         listItem.setAttribute('role', 'tab');
         const link = document.createElement('a');
@@ -370,7 +502,13 @@ function createUnifiedMenu({
     menuList.appendChild(separator);
 
     Object.keys(SETTINGS_CONFIG).forEach((sectionName) => {
-        if (sectionName === 'Developer' && !devTabAdded) return;
+        if (
+            !shouldShowSettingsSection(sectionName, {
+                devTabAdded,
+                funStuffTabEnabled,
+            })
+        )
+            return;
         const listItem = createSidebarItem(
             sectionName,
             SETTINGS_CONFIG[sectionName].title,
@@ -379,6 +517,51 @@ function createUnifiedMenu({
         menuList.appendChild(listItem);
     });
     return menuList;
+}
+
+function addStaticTabItem(item, menuList, loadTabContent) {
+    const listItem = document.createElement('li');
+    listItem.id = `${item.text.toLowerCase()}-tab`;
+    listItem.dataset.text = item.text;
+    listItem.dataset.staticId = item.id;
+    listItem.className = 'menu-option';
+    listItem.setAttribute('role', 'tab');
+
+    const link = document.createElement('a');
+    link.className = 'menu-option-content';
+    link.href = `#!/${item.text.toLowerCase()}`;
+
+    const span = document.createElement('span');
+    span.className = 'font-caption-header';
+    span.textContent = item.text;
+    link.appendChild(span);
+    listItem.appendChild(link);
+
+    link.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const newHashKey = item.text.toLowerCase();
+        const newUrl = new URL(window.location.href);
+        if (newUrl.searchParams.get('rovalra') !== newHashKey) {
+            newUrl.searchParams.set('rovalra', newHashKey);
+            history.pushState(null, '', newUrl.pathname + newUrl.search);
+        }
+        await loadTabContent(newHashKey);
+        stripInlineStyles(document.getElementById('content-container'));
+
+        const dropdownTrigger = document.querySelector(
+            '#rovalra-mobile-menu-container .rovalra-dropdown-trigger span',
+        );
+        if (dropdownTrigger) dropdownTrigger.textContent = item.text;
+    });
+
+    const separator = menuList.querySelector('.menu-separator');
+    if (separator) {
+        menuList.insertBefore(listItem, separator);
+    } else {
+        menuList.appendChild(listItem);
+    }
+
+    return listItem;
 }
 
 function createSidebarItem(sectionName, title, loadTabContent) {
@@ -431,7 +614,7 @@ function addDeveloperTabUI({ menuList, loadTabContent, renderMobileDropdown }) {
     if (menuList && loadTabContent) {
         const devItem = createSidebarItem(
             'Developer',
-            'Developer',
+            SETTINGS_CONFIG.Developer.title,
             loadTabContent,
         );
 
@@ -443,6 +626,83 @@ function addDeveloperTabUI({ menuList, loadTabContent, renderMobileDropdown }) {
         requestAnimationFrame(() => {
             devItem.style.opacity = '1';
         });
+    }
+
+    if (typeof renderMobileDropdown === 'function') {
+        renderMobileDropdown();
+    }
+}
+
+function updateFunStuffTabUI({
+    enabled,
+    menuList,
+    loadTabContent,
+    renderMobileDropdown,
+}) {
+    const existingItem = document.getElementById('funstuff-tab');
+
+    if (enabled && !existingItem && menuList && loadTabContent) {
+        const funItem = createSidebarItem(
+            'FunStuff',
+            SETTINGS_CONFIG.FunStuff.title,
+            loadTabContent,
+        );
+        const developerItem = document.getElementById('developer-tab');
+
+        if (developerItem) {
+            menuList.insertBefore(funItem, developerItem);
+        } else {
+            menuList.appendChild(funItem);
+        }
+    } else if (!enabled && existingItem) {
+        existingItem.remove();
+
+        const currentTab = new URLSearchParams(window.location.search).get(
+            'rovalra',
+        );
+        if (currentTab?.toLowerCase() === 'funstuff') {
+            const newUrl = new URL(window.location.href);
+            newUrl.searchParams.set('rovalra', 'info');
+            history.pushState(null, '', newUrl.pathname + newUrl.search);
+            loadTabContent('info');
+        }
+    }
+
+    if (typeof renderMobileDropdown === 'function') {
+        renderMobileDropdown();
+    }
+}
+
+function updateAccountStandingTabUI({
+    enabled,
+    buttonData,
+    menuList,
+    loadTabContent,
+    renderMobileDropdown,
+}) {
+    const existingItem = document.querySelector(
+        '#unified-menu li[data-static-id="accountStanding"]',
+    );
+
+    if (enabled && !existingItem && menuList && loadTabContent) {
+        const accountStandingItem = buttonData.find(
+            (item) => item.id === 'accountStanding',
+        );
+        if (accountStandingItem) {
+            addStaticTabItem(accountStandingItem, menuList, loadTabContent);
+        }
+    } else if (!enabled && existingItem) {
+        existingItem.remove();
+
+        const currentTab = new URLSearchParams(window.location.search).get(
+            'rovalra',
+        );
+        if (currentTab?.toLowerCase() === 'account standing') {
+            const newUrl = new URL(window.location.href);
+            newUrl.searchParams.set('rovalra', 'info');
+            history.pushState(null, '', newUrl.pathname + newUrl.search);
+            loadTabContent('info');
+        }
     }
 
     if (typeof renderMobileDropdown === 'function') {

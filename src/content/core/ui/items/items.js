@@ -10,6 +10,44 @@ let batchQueue = [];
 let batchTimeout = null;
 const BATCH_DELAY = 50;
 
+function getCollectibleLowestResalePrice(data) {
+    const resalePrice =
+        data?.CollectiblesItemDetails?.CollectibleLowestResalePrice ??
+        data?.collectiblesItemDetails?.collectibleLowestResalePrice ??
+        data?.lowestResalePrice;
+
+    return typeof resalePrice === 'number' && resalePrice > 0
+        ? resalePrice
+        : null;
+}
+
+function getItemRawPrice(...sources) {
+    for (const source of sources) {
+        const price =
+            source?.lowestPrice ??
+            source?.priceInRobux ??
+            source?.price ??
+            source?.PriceInRobux;
+
+        if (typeof price === 'number') return price;
+    }
+
+    return null;
+}
+
+function isBundleAssetProxy(looksItemData, assetId) {
+    return looksItemData?.itemType === 'Bundle' && looksItemData.id !== assetId;
+}
+
+function isItemOffSale(data) {
+    return (
+        data?.isOffSale === true ||
+        data?.noPriceStatus === 'OffSale' ||
+        data?.priceStatus === 'Off Sale' ||
+        data?.isPurchasable === false
+    );
+}
+
 async function fetchEconomyItemDetails(
     assetId,
     looksItemData = null,
@@ -28,25 +66,30 @@ async function fetchEconomyItemDetails(
         const restrictions = [];
         if (data.IsLimited) restrictions.push('Limited');
         if (data.IsLimitedUnique) restrictions.push('LimitedUnique');
+        if (
+            data.CollectiblesItemDetails?.IsLimited &&
+            !restrictions.includes('Collectible')
+        ) {
+            restrictions.push('Collectible');
+        }
         catalogItemData?.itemRestrictions?.forEach((restriction) => {
             if (!restrictions.includes(restriction)) {
                 restrictions.push(restriction);
             }
         });
-        looksItemData?.itemRestrictions?.forEach((restriction) => {
-            if (!restrictions.includes(restriction)) {
-                restrictions.push(restriction);
-            }
-        });
+        if (!isBundleAssetProxy(looksItemData, assetId)) {
+            looksItemData?.itemRestrictions?.forEach((restriction) => {
+                if (!restrictions.includes(restriction)) {
+                    restrictions.push(restriction);
+                }
+            });
+        }
 
-        const rawPrice =
-            looksItemData?.priceInRobux ??
-            looksItemData?.lowestPrice ??
-            looksItemData?.price ??
-            data.PriceInRobux ??
-            catalogItemData?.priceInRobux ??
-            catalogItemData?.lowestPrice ??
-            catalogItemData?.price;
+        const resalePrice = getCollectibleLowestResalePrice(data);
+        const priceSources = isBundleAssetProxy(looksItemData, assetId)
+            ? [catalogItemData, data]
+            : [looksItemData, catalogItemData, data];
+        const rawPrice = resalePrice ?? getItemRawPrice(...priceSources);
 
         const item = {
             assetId,
@@ -65,16 +108,14 @@ async function fetchEconomyItemDetails(
             item.bundleId = looksItemData.id;
         }
 
-        const isForSale = looksItemData
-            ? !looksItemData.isOffSale &&
-              looksItemData.noPriceStatus !== 'OffSale' &&
-              looksItemData.isPurchasable !== false
-            : (data.IsForSale ??
-              (!catalogItemData?.isOffSale &&
-                  catalogItemData?.noPriceStatus !== 'OffSale' &&
-                  catalogItemData?.isPurchasable !== false));
+        const saleSource = isBundleAssetProxy(looksItemData, assetId)
+            ? catalogItemData
+            : looksItemData;
+        const isForSale = saleSource
+            ? !isItemOffSale(saleSource)
+            : (data.IsForSale ?? !isItemOffSale(catalogItemData));
 
-        if (!isForSale) {
+        if (!isForSale && resalePrice == null) {
             item.priceText = 'Off Sale';
         } else {
             item.price = rawPrice;
@@ -195,10 +236,16 @@ async function processBatch() {
                     }
 
                     // using the catalog api for limiteds CUZ ROBLOX ISNT CONSISTENT AT ALL
+                    const isLooksBundleProxy = isBundleAssetProxy(
+                        looksItemData,
+                        request.id,
+                    );
                     const restrictions = [
                         ...new Set([
                             ...(catalogItemData.itemRestrictions || []),
-                            ...(looksItemData?.itemRestrictions || []),
+                            ...(isLooksBundleProxy
+                                ? []
+                                : looksItemData?.itemRestrictions || []),
                         ]),
                     ];
 
@@ -207,10 +254,27 @@ async function processBatch() {
                         restrictions.includes('LimitedUnique') ||
                         restrictions.includes('Collectible');
 
-                    const rawPrice =
-                        itemData.priceInRobux ??
-                        itemData.lowestPrice ??
-                        itemData.price;
+                    const saleItemData = isLooksBundleProxy
+                        ? catalogItemData
+                        : itemData;
+                    const isOffSale = isItemOffSale(saleItemData);
+                    const priceSources = isLooksBundleProxy
+                        ? [catalogItemData]
+                        : [saleItemData, looksItemData];
+                    let rawPrice = getItemRawPrice(...priceSources);
+                    let economyItem = null;
+
+                    if (isLimited && (isOffSale || rawPrice == null)) {
+                        economyItem = await fetchEconomyItemDetails(
+                            request.id,
+                            looksItemData,
+                            catalogItemData,
+                        );
+
+                        if (economyItem?.price != null) {
+                            rawPrice = economyItem.price;
+                        }
+                    }
 
                     const item = {
                         assetId: request.id,
@@ -229,13 +293,10 @@ async function processBatch() {
                         item.bundleId = looksItemData.id;
                     }
 
-                    if (
-                        itemData.isOffSale ||
-                        itemData.noPriceStatus === 'OffSale' ||
-                        !itemData.isPurchasable
-                    ) {
+                    if (isOffSale) {
                         if (isLimited && rawPrice != null) {
                             item.price = rawPrice;
+                            item.recentAveragePrice = rawPrice;
                         } else {
                             item.priceText = 'Off Sale';
                         }

@@ -1,6 +1,6 @@
 import { getUserIdFromUrl } from '../../../core/idExtractor.js';
 import { getUserSettings } from '../../../core/donators/settingHandler.js';
-import { observeElement } from '../../../core/observer.js';
+import { observeChildren, observeElement } from '../../../core/observer.js';
 import { settings as rovalraSettings } from '../../../core/settings/getSettings.js';
 import { createPill } from '../../../core/ui/general/pill.js';
 
@@ -23,7 +23,50 @@ function createProfileViewsContent(views) {
 function keepPillAfterUsernameDetails(targetContainer, pill) {
     const appendPill = () => {
         if (!pill.isConnected || pill.parentElement !== targetContainer) return;
-        targetContainer.appendChild(pill);
+
+        const subplaceChip = targetContainer.querySelector(
+            [
+                ':scope > .rovalra-profile-subplace-legacy-chip',
+                ':scope > .rovalra-profile-subplace-legacy-row',
+            ].join(','),
+        );
+        const customizationPill = targetContainer.querySelector(
+            ':scope > .rovalra-profile-customization-pill',
+        );
+        const roproLikeCount = targetContainer.querySelector(
+            ':scope > #reputationDiv',
+        );
+
+        if (roproLikeCount) {
+            if (roproLikeCount.nextElementSibling !== pill) {
+                roproLikeCount.after(pill);
+            }
+            if (
+                customizationPill &&
+                pill.nextElementSibling !== customizationPill
+            ) {
+                pill.after(customizationPill);
+            }
+            return;
+        }
+
+        if (customizationPill) {
+            if (pill.nextElementSibling !== customizationPill) {
+                customizationPill.before(pill);
+            }
+            return;
+        }
+
+        if (subplaceChip) {
+            if (pill.nextElementSibling !== subplaceChip) {
+                subplaceChip.before(pill);
+            }
+            return;
+        }
+
+        if (targetContainer.lastElementChild !== pill) {
+            targetContainer.appendChild(pill);
+        }
     };
 
     appendPill();
@@ -72,6 +115,9 @@ async function initProfileViews() {
 
             targetContainer.appendChild(pill);
             keepPillAfterUsernameDetails(targetContainer, pill);
+            observeChildren(targetContainer, () =>
+                keepPillAfterUsernameDetails(targetContainer, pill),
+            );
         },
     );
 }

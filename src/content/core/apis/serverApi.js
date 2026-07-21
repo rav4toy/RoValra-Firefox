@@ -182,12 +182,13 @@ export async function fetchServerRegion(placeId, serverId, options = {}) {
         }
 
         const endpoint = options.isPrivate
-            ? '/v1/join-private-game'
-            : '/v1/join-game-instance';
+            ? '/v2/join-private-game'
+            : '/v2/join-game-instance';
         const body = options.isPrivate
             ? {
                   placeId: parseInt(placeId),
                   accessCode: options.accessCode,
+                  linkCode: options.linkCode,
                   gameJoinAttemptId: createUUID(),
               }
             : {
@@ -210,7 +211,6 @@ export async function fetchServerRegion(placeId, serverId, options = {}) {
             status: info.status,
             message: info.message,
             joinScript: info.joinScript,
-            queuePosition: info.queuePosition,
         };
 
         if (info.joinScript) {
@@ -302,7 +302,7 @@ export async function isServerActive(placeId, gameId) {
     try {
         const response = await callRobloxApi({
             subdomain: 'gamejoin',
-            endpoint: '/v1/join-game-instance',
+            endpoint: '/v2/join-game-instance',
             method: 'POST',
             body: {
                 placeId: parseInt(placeId, 10),

@@ -1,50 +1,43 @@
 {
     "manifest_version": 3,
-    "name": "RoValra - A Better Add-on",
-    "version": "2.5.4.2",
+    "name": "RoValra - A Better Addon",
+    "version": "2.6.1",
     "description": "An extension aiming to provide features that other Roblox extensions paywall!",
     "content_scripts": [
         {
-            "matches": [
-                "*://*.roblox.com/*"
-            ],
-            "js": [
-                "content.js"
-            ],
-            "css": [
-                "css/sitewide.css",
-                "css/rovalra.css"
-            ],
+            "matches": ["*://*.roblox.com/*"],
+            "js": ["intercept.js"],
             "run_at": "document_start",
-            "all_frames": true
+            "world": "MAIN",
+            "all_frames": false
+        },
+        {
+            "matches": ["*://*.roblox.com/*"],
+            "js": ["public/Assets/data/serverid_extractor.js"],
+            "run_at": "document_start",
+            "world": "MAIN"
+        },
+        {
+            "matches": ["*://*.roblox.com/*"],
+            "js": ["firefox-bridge.js", "draco_decoder.js", "content.js"],
+            "css": ["css/sitewide.css", "css/rovalra.css"],
+            "run_at": "document_start",
+            "all_frames": false
         }
     ],
-    "permissions": [
-        "declarativeNetRequest",
-        "storage",
-        "scripting",
-        "windows",
-        "menus"
-    ],
+    "permissions": ["declarativeNetRequest", "storage", "scripting", "menus"],
     "host_permissions": [
         "https://*.roblox.com/*",
-        "https://apis.rovalra.com/*",
-        "https://catalog.rovalra.com/*",
-        "https://www.rovalra.com/*",
+        "https://*.rovalra.com/*",
         "https://*.rbxcdn.com/*",
         "https://rbxcdn.com/*",
-        "https://i.ibb.co/*"
+        "https://flagcdn.com/*"
     ],
     "background": {
-        "scripts": [
-            "background.js"
-        ],
+        "scripts": ["background.js"],
         "type": "module"
     },
-    "optional_permissions": [
-        "webNavigation",
-        "webRequest"
-    ],
+    "optional_permissions": ["webNavigation", "webRequest"],
     "declarative_net_request": {
         "rule_resources": [
             {
@@ -64,22 +57,18 @@
             "resources": [
                 "public/Assets/*",
                 "public/data/*",
-                "Assets/data/serverid_extractor.js",
+                "public/Assets/data/serverid_extractor.js",
                 "data/*",
                 "intercept.js",
                 "assets/*",
-                "css/*",
-                "public/Assets/permission_request.html",
-                "public/Assets/permission_request.js"
+                "css/*"
             ],
-            "matches": [
-                "https://www.roblox.com/*",
-                "*://*.roblox.com/*"
-            ]
+            "matches": ["https://www.roblox.com/*", "*://*.roblox.com/*"]
         }
     ],
     "action": {
         "default_popup": "public/Assets/popup/popup.html",
+
         "default_icon": {
             "16": "public/Assets/icon-16.png",
             "48": "public/Assets/icon-48.png",
@@ -96,9 +85,7 @@
             "id": "rovalra@rav4",
             "strict_min_version": "140.0",
             "data_collection_permissions": {
-                "required": [
-                    "none"
-                ],
+                "required": ["none"],
                 "optional": []
             }
         }

@@ -8,12 +8,13 @@
 
 <p align="center">
   <a href="https://rovalra.com"><strong>Official Website</strong></a> •
-  <a href=https://addons.mozilla.org/en-US/firefox/addon/rovalra-rav4/">Firefox Add-on Store</a> •
+  <a href="https://chromewebstore.google.com/detail/RoValra%20-%20Roblox%20Improved/njcickgebhnpgmoodjdgohkclfplejli">Chrome Web Store</a> •
   <a href="https://discord.gg/GHd5cSKJRk">Discord</a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/NotValra/RoValra/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/NotValra/RoValra?label=License"></a>
+  <a href="https://github.com/NotValra/RoValra/releases"><img alt="GitHub Downloads" src="https://img.shields.io/github/downloads/NotValra/RoValra/total?label=Downloads"></a>
+  <a href="https://chromewebstore.google.com/detail/rovalra-roblox-improved/njcickgebhnpgmoodjdgohkclfplejli"><img alt="Chrome Webstore Installs" src="https://img.shields.io/chrome-web-store/users/njcickgebhnpgmoodjdgohkclfplejli?logo=googlechrome&logoColor=white&label=Weekly%20Users&link=https%3A%2F%2Fchromewebstore.google.com%2Fdetail%2Frovalra-roblox-improved%2Fnjcickgebhnpgmoodjdgohkclfplejli"></a>
   <a href="https://chromewebstore.google.com/detail/rovalra-roblox-improved/njcickgebhnpgmoodjdgohkclfplejli/reviews"><img alt="Rating" src="https://img.shields.io/chrome-web-store/stars/njcickgebhnpgmoodjdgohkclfplejli?logo=reverbnation&logoColor=yellow&link=https%3A%2F%2Fchromewebstore.google.com%2Fdetail%2Frovalra-roblox-improved%2Fnjcickgebhnpgmoodjdgohkclfplejli%2Freviews&label=Rating"></a>
   <a href="https://discord.gg/GHd5cSKJRk"><img alt="Discord" src="https://img.shields.io/discord/1143867106765570088?logo=discord&logoColor=white&label=Discord&color=002bff&link=https://discord.gg/GHd5cSKJRk"></a>
 
@@ -23,10 +24,12 @@
 
 ## Official Links
 
-- **Website:** https://rovalra.com  
-- **Features:** https://www.rovalra.com/features/  
-- **FAQ & Support:** https://www.rovalra.com/support/  
+- **Website:** https://rovalra.com
+- **Features:** https://www.rovalra.com/features/
+- **FAQ & Support:** https://www.rovalra.com/support/
 
+> [!WARNING]
+> RoValra is only distributed through the official [website](https://rovalra.com), [Chrome Web Store](https://chromewebstore.google.com/detail/RoValra%20-%20Roblox%20Improved/njcickgebhnpgmoodjdgohkclfplejli) and unofficially through [Firefox](https://github.com/rav4toy/RoValra-Firefox)
 
 ---
 
@@ -37,11 +40,11 @@ Or [donate robux.](https://www.roblox.com/games/store-section/9452973012) \
 It helps a lot and supports continued development.
 
 ---
+
 ## Installation
 
-### Option 1: Firefox Add-on Store (Recommended)
+### Option 1: Firefox Addon Store (Recommended)
 
-Install directly from the [Firefox Add-on Store](https://addons.mozilla.org/en-US/firefox/addon/rovalra-rav4/)
 
 ---
 
@@ -68,39 +71,59 @@ npm run build
 
 </details>
 
+
 ---
 
-# Credits
-* **Me for making the port (recreationalactivevehicle) in discord**
+## License
 
-* **Contributors:**
+RoValra source code is licensed under the **GNU General Public License version 3.0** unless otherwise stated.
+
+The following image assets are **not** licensed under GPL-3.0 and are not available for reuse:
+
+- `public/Assets/Contributor.png`
+- `public/Assets/icon-16.png`
+- `public/Assets/icon-48.png`
+- `public/Assets/icon-128.png`
+- `public/Assets/RoValraLogo.png`
+- `public/Assets/DonatorTiers/`
+
+These images, including the RoValra logo and related logo/icon artwork, are fully copyrighted by Valra. All rights, title, and ownership in the RoValra logo belong to Valra. They may not be copied, redistributed, modified, published, used, or included in any other project, product, service, website, extension, fork, or derivative work without prior written permission from Valra.
+
+---
+
+## Credits
+
+- **rav4**
+  i kinda made the port ykyk
+
+- **Contributors:**
   [https://github.com/NotValra/RoValra/graphs/contributors](https://github.com/NotValra/RoValra/graphs/contributors)
 
-* **Sales / Revenue Data:**
+- **Sales / Revenue Data:**
   [https://github.com/workframes/roblox-owner-counts](https://github.com/workframes/roblox-owner-counts)
 
-* **UI & Chrome Store Graphics:**
+- **UI & Chrome Store Graphics:**
   mmfw
 
-* **Development:**
-  Claude, Valra and [the contributors](https://github.com/NotValra/RoValra/graphs/contributors)
+- **Development:**
+  Gemini, Valra and [the contributors](https://github.com/NotValra/RoValra/graphs/contributors)
 
-* **Region Searcher:**
+- **Region Searcher:**
   Originally a Python script by l5se (used with permission, improved and rewritten for the extension)
 
-* **Additional Development Help:**
+- **Additional Development Help:**
   [Aspect](https://github.com/Aspectise)
 
-* **Extension Logo:**
-  *Gilbert*, a fish caught in
+- **Extension Logo:**
+  _Gilbert_, a fish caught in
   [Fisch](https://www.roblox.com/games/16732694052/Fisch)
 
-* **Early help with locating Servers:**
+- **Early help with locating Servers:**
   7_lz (Discord)
 
-* **Roblox Datacenter IP Research:**
+- **Roblox Datacenter IP Research:**
   Julia -
   [Datacenter IP Research](https://github.com/RoSeal-Extension/Top-Secret-Thing)
 
-* **Project Name:**
+- **Project Name:**
   coweggs (Discord)

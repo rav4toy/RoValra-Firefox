@@ -5,7 +5,6 @@ import {
     RBXRenderer, 
     Instance, 
     HumanoidDescriptionWrapper, 
-    RBX, 
     Outfit, 
     API,
     FLAGS,
@@ -79,7 +78,7 @@ async function renderAvatarPage(contentDiv) {
         const rigUrl = chrome.runtime.getURL(`assets/Rig${rigType}.rbxm`);
         const rigResult = await API.Asset.GetRBX(rigUrl, undefined);
         
-        if (rigResult instanceof RBX) {
+        if (rigResult && typeof rigResult.generateTree === 'function') {
             if (currentRig) currentRig.Destroy();
             currentRig = rigResult.generateTree().GetChildren()[0];
             RBXRenderer.addInstance(currentRig, null);

@@ -5,6 +5,7 @@ import { callRobloxApi } from '../../core/api.js';
 import DOMPurify from 'dompurify';
 import { launchGame } from '../../core/utils/launcher.js';
 import { t, ts } from '../../core/locale/i18n.js';
+import { getCountryFlagImageUrl } from '../../core/ui/flags.js';
 import {
     fetchServerDetails,
     fetchServerRegion,
@@ -186,21 +187,7 @@ async function fetchUserPresence(userId) {
     }
 }
 
-
-function countryCodeToUnicodeFlag(countryCode) {
-    const code = String(countryCode || '')
-        .trim()
-        .toUpperCase()
-        .split('-')[0];
-
-    if (!/^[A-Z]{2}$/.test(code)) return '';
-
-    return [...code]
-        .map((char) => String.fromCodePoint(0x1f1e6 + char.charCodeAt(0) - 65))
-        .join('');
-}
-
-const buildInfoList = (
+const buildInfoList = async (
     gameId,
     isPrivateServer,
     regionCode,
@@ -243,11 +230,12 @@ const buildInfoList = (
     }
 
     if (regionCode && regionName) {
-        const flagEmoji = countryCodeToUnicodeFlag(regionCode);
-        const flagHtml = flagEmoji
-            ? `<span class="rovalra-unicode-flag" style="display:inline-block;width:20px;text-align:center;margin-right:4px;">${flagEmoji}</span>`
+        const flagCountryCode = regionCode.toLowerCase().split('-')[0];
+        const flagUrl = await getCountryFlagImageUrl(flagCountryCode, 'w40');
+        const flagMarkup = flagUrl
+            ? `<img src="${flagUrl}" alt="${regionCode}"> `
             : '';
-        listItems.push(`<li ${liClass}>${flagHtml} ${regionName}</li>`);
+        listItems.push(`<li ${liClass}>${flagMarkup}${regionName}</li>`);
     }
 
     if (placeVersion)
@@ -661,7 +649,7 @@ function initializeJoinDialogEnhancer() {
                                 if (isGenericJoin) {
                                     const response = await callRobloxApi({
                                         subdomain: 'gamejoin',
-                                        endpoint: '/v1/join-game',
+                                        endpoint: '/v2/join-game',
                                         method: 'POST',
                                         body: apiBody,
                                     });
@@ -675,6 +663,7 @@ function initializeJoinDialogEnhancer() {
                                             isPrivate: true,
                                             accessCode:
                                                 urlParams.get('accessCode'),
+                                            linkCode: urlParams.get('linkCode'),
                                         },
                                     );
                                 } else if (isFollowingUser) {
@@ -682,7 +671,7 @@ function initializeJoinDialogEnhancer() {
                                         urlParams.get('userId');
                                     const response = await callRobloxApi({
                                         subdomain: 'gamejoin',
-                                        endpoint: '/v1/play-with-user',
+                                        endpoint: '/v2/play-with-user',
                                         method: 'POST',
                                         body: {
                                             userIdToFollow: parseInt(
@@ -808,7 +797,7 @@ function initializeJoinDialogEnhancer() {
                             await fetchServerDetails(placeId, [resolvedGameId]);
                         }
 
-                        const htmlDetails = buildInfoList(
+                        const htmlDetails = await buildInfoList(
                             resolvedGameId,
                             isPrivateServer,
                             regionCode,
@@ -834,7 +823,7 @@ function initializeJoinDialogEnhancer() {
                         if (currentGameId) {
                             await fetchServerDetails(placeId, [currentGameId]);
                         }
-                        const htmlDetails = buildInfoList(
+                        const htmlDetails = await buildInfoList(
                             currentGameId,
                             isPrivateServer,
                             null,

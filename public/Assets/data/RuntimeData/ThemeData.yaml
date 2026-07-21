@@ -1,0 +1,35 @@
+Default:
+  StorageKey: 'default'
+  PrimaryClass: null
+
+Light:
+  StorageKey: 'builtin-light'
+  PrimaryClass: 'light-theme'
+
+Dark:
+  StorageKey: 'builtin-dark'
+  PrimaryClass: 'dark-theme'
+
+Nighty:
+  StorageKey: 'custom-nighty'
+  PrimaryClass: 'rovalra-custom-nighty-theme'
+  ClassList:
+    - 'dark-theme'
+
+Sunset:
+  StorageKey: 'custom-sunset'
+  PrimaryClass: 'rovalra-custom-sunset-theme'
+  ClassList:
+    - 'light-theme'
+
+HighContrast:
+  StorageKey: 'custom-highcontrast'
+  PrimaryClass: 'rovalra-custom-highcontrast-theme'
+  ClassList:
+    - 'dark-theme'
+
+CustomUser:
+  StorageKey: 'custom-user'
+  PrimaryClass: 'rovalra-custom-user-theme'
+  ClassList:
+    - 'dark-theme'

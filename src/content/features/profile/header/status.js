@@ -1,5 +1,4 @@
 import { observeElement, startObserving } from '../../../core/observer.js';
-import * as cache from '../../../core/storage/cacheHandler.js';
 import { getUserIdFromUrl } from '../../../core/idExtractor.js';
 import { injectStylesheet } from '../../../core/ui/cssInjector.js';
 import { addTooltip } from '../../../core/ui/tooltip.js';
@@ -14,30 +13,25 @@ import { showSystemAlert } from '../../../core/ui/roblox/alert.js';
 import { reportUserContent } from '../../../core/report.js';
 import { showConfirmationPrompt } from '../../../core/ui/confirmationPrompt.js';
 import { ensureTouAgreement } from '../../../core/ui/tou/touAgreement.js';
-import {
-    parseMarkdown,
-    parseUntrustedMarkdown,
-} from '../../../core/utils/markdown.js';
+import { parseUntrustedMarkdown } from '../../../core/utils/markdown.js';
 import { migrateLegacyStatus } from '../../../core/profile/descriptionhandler.js';
 import DOMPurify from 'dompurify';
-import { fetchAssetAsDataUrl } from '../../../core/firefox/compat.js';
+import { TRUSTED_USER_IDS } from '../../../core/configs/userIds.js';
 import {
-    TRUSTED_USER_IDS,
-    ARTIST_USER_IDS,
-    RAT_BADGE_USER_ID,
-    BLAHAJ_BADGE_USER_ID,
-    CAM_BADGE_USER_ID,
-    alice_badge_user_id,
-    GILBERT_USER_ID,
-} from '../../../core/configs/userIds.js';
-import { getCurrentUserTier } from '../../../core/settings/handlesettings.js';
-import {
+    getUserCardContext,
     onUserCardElement,
     observeUserCardElements,
 } from '../../../core/profile/userCardElements.js';
+import { settings } from '../../../core/settings/getSettings.js';
 const MAX_STATUS_LENGTH = 128;
 const REPORTING_ENABLED = false;
 let activeHomeStatusBubble = null;
+const homeStatusControllers = new WeakMap();
+
+function renderStatusBubbleContent(bubble, statusText) {
+    const html = parseUntrustedMarkdown(statusText);
+    bubble.innerHTML = html; // Verified
+}
 
 function cleanupStatusElements(container) {
     if (!container) return;
@@ -53,71 +47,12 @@ function cleanupStatusElements(container) {
                 element.load();
             }
             element.remove();
-        } catch (e) {}
+        } catch (e) { }
     }
 }
 
 const downloadableExtensions =
     /\.(zip|rar|7z|tar|gz|exe|msi|dmg|iso|apk|ahk|ps1|cmd|bat|cmd|com|scr|cpl|sys|dll|js|jse|vbs|vbe|wsf|wsh|ps1|psm1|psd1|sh|docm|xlsm|pptm|dotm|xltm|deb|rpm|pkg|appimage|hta|jar|class)$/i;
-
-const statusImageProxyCache = new Map();
-
-function shouldProxyStatusImage(src) {
-    if (!src || typeof src !== 'string') return false;
-    const trimmed = src.trim();
-    if (/^(data:|blob:|moz-extension:|chrome-extension:)/i.test(trimmed)) return false;
-    try {
-        const url = new URL(trimmed, window.location.href);
-        return url.protocol === 'https:' || url.protocol === 'http:';
-    } catch (e) {
-        return false;
-    }
-}
-
-async function proxyStatusImage(src) {
-    if (!shouldProxyStatusImage(src)) return src;
-    if (statusImageProxyCache.has(src)) return statusImageProxyCache.get(src);
-    const promise = fetchAssetAsDataUrl(src).catch(() => '');
-    statusImageProxyCache.set(src, promise);
-    return promise;
-}
-
-async function sanitizeTrustedStatusMarkdown(text) {
-    const cleanHtml = DOMPurify.sanitize(parseMarkdown(text), {
-        FORBID_ATTR: ['style'],
-        FORBID_TAGS: ['audio'],
-    });
-
-    const template = document.createElement('template');
-    template.innerHTML = cleanHtml;
-
-    const images = Array.from(template.content.querySelectorAll('img[src]'));
-    await Promise.all(
-        images.map(async (img) => {
-            const originalSrc = img.getAttribute('src');
-            if (!shouldProxyStatusImage(originalSrc)) return;
-            const proxiedSrc = await proxyStatusImage(originalSrc);
-            if (proxiedSrc) {
-                img.setAttribute('src', proxiedSrc);
-            } else {
-                img.removeAttribute('src');
-            }
-        }),
-    );
-
-    return template.innerHTML;
-}
-
-async function renderTrustedStatus(target, text) {
-    target.innerHTML = await sanitizeTrustedStatusMarkdown(text);
-
-    const videos = target.querySelectorAll('video');
-    for (const video of videos) {
-        video.muted = true;
-        video.volume = 0;
-        video.play().catch(() => {});
-    }
-}
 
 DOMPurify.addHook('afterSanitizeAttributes', (currentNode) => {
     if (currentNode.tagName === 'A' && currentNode.hasAttribute('href')) {
@@ -138,7 +73,7 @@ DOMPurify.addHook('afterSanitizeAttributes', (currentNode) => {
                 currentNode.style.cursor = 'text';
                 currentNode.style.pointerEvents = 'none';
             }
-        } catch (e) {}
+        } catch (e) { }
     }
 
     if (currentNode.tagName === 'IMG' && currentNode.hasAttribute('src')) {
@@ -152,9 +87,40 @@ DOMPurify.addHook('afterSanitizeAttributes', (currentNode) => {
             ) {
                 currentNode.removeAttribute('src');
             }
-        } catch (e) {}
+        } catch (e) { }
     }
 });
+
+function createStatusHelpText(isTrusted) {
+    const helpText = document.createElement('p');
+    helpText.className = 'text-description';
+    Object.assign(helpText.style, {
+        fontSize: '12px',
+        lineHeight: '1.4',
+    });
+
+    if (isTrusted) {
+        helpText.textContent =
+            "As a trusted RoValra user, your status bypasses the normal status filters. Do not add swears or anything against Roblox's ToS or RoValra's ToS. Links to your own stuff are allowed but don't link anything discord, youtube, x, etc pretty much don't link any social platforms..";
+        return helpText;
+    }
+
+    helpText.append(
+        "You must follow Roblox's ToS and RoValra's ToS when using status bubbles. If you break these rules, your status may be reset and your status privileges may be revoked.",
+        document.createElement('br'),
+        document.createElement('br'),
+        "If you're restricted from status, ",
+    );
+
+    const appealLink = document.createElement('a');
+    appealLink.href =
+        'https://www.roblox.com/my/account?rovalra=account+standing';
+    appealLink.textContent = 'appeal here';
+    appealLink.style.textDecoration = 'underline';
+    helpText.append(appealLink, '.');
+
+    return helpText;
+}
 
 function openEditStatusOverlay(currentStatus, onSave, isTrusted) {
     const container = document.createElement('div');
@@ -177,19 +143,7 @@ function openEditStatusOverlay(currentStatus, onSave, isTrusted) {
 
     container.appendChild(inputContainer);
 
-    if (isTrusted) {
-        const trustedHelpText = document.createElement('p');
-        trustedHelpText.className = 'text-description';
-        trustedHelpText.innerHTML = DOMPurify.sanitize(`
-            You are a trusted RoValra user, you can add any text, embed videos, and images.
-            <br>
-            <strong>Note:</strong> If you are found to add inappropriate content against the Roblox ToS, your donator and custom badges will be revoked with no chance to get it back.
-        `);
-        Object.assign(trustedHelpText.style, {
-            fontSize: '12px',
-        });
-        container.appendChild(trustedHelpText);
-    }
+    container.appendChild(createStatusHelpText(isTrusted));
 
     const errorDisplay = document.createElement('p');
     errorDisplay.className = 'text-error';
@@ -232,6 +186,9 @@ function openEditStatusOverlay(currentStatus, onSave, isTrusted) {
 
         if (result === true) {
             close();
+        } else if (typeof result === 'string' && result.trim()) {
+            errorDisplay.textContent = result;
+            errorDisplay.style.display = 'block';
         } else {
             errorDisplay.textContent =
                 'An unknown error occurred while saving. No changes were applied.';
@@ -244,10 +201,11 @@ async function addStatusBubble(avatarContainer) {
     if (avatarContainer.querySelector('.rovalra-status-bubble-wrapper')) return;
 
     try {
+        avatarContainer.classList.add('rovalra-status-bubble-host');
+
         const userId = getUserIdFromUrl();
         if (!userId) return;
-
-        const isUserTrusted = TRUSTED_USER_IDS.has(String(userId));
+        const isTrusted = TRUSTED_USER_IDS.has(String(userId));
 
         const authenticatedUserId = await getAuthenticatedUserId();
         const isOwnProfile =
@@ -279,11 +237,7 @@ async function addStatusBubble(avatarContainer) {
         const bubble = document.createElement('div');
         bubble.className = 'rovalra-status-bubble text-label-medium';
 
-        if (isUserTrusted) {
-            await renderTrustedStatus(bubble, statusText);
-        } else {
-            bubble.innerHTML = parseUntrustedMarkdown(statusText); // Verified
-        }
+        renderStatusBubbleContent(bubble, statusText);
 
         bubbleWrapper.appendChild(bubble);
         avatarContainer.appendChild(bubbleWrapper);
@@ -296,7 +250,7 @@ async function addStatusBubble(avatarContainer) {
                     : 'Click to edit';
             addTooltip(bubble, tooltipText);
 
-            const updateBubbleUI = async (newStatus) => {
+            const updateBubbleUI = (newStatus) => {
                 statusText = newStatus || '...';
                 const textToRender = newStatus
                     ? newStatus.length > MAX_STATUS_LENGTH
@@ -304,11 +258,7 @@ async function addStatusBubble(avatarContainer) {
                         : newStatus
                     : '...';
 
-                if (isUserTrusted) {
-                    await renderTrustedStatus(bubble, textToRender);
-                } else {
-                    bubble.innerHTML = parseUntrustedMarkdown(textToRender); // Verified
-                }
+                renderStatusBubbleContent(bubble, textToRender);
 
                 const newTooltipText =
                     statusText === '...'
@@ -319,9 +269,6 @@ async function addStatusBubble(avatarContainer) {
 
             bubble.addEventListener('click', (e) => {
                 e.stopPropagation();
-                const isTrusted = TRUSTED_USER_IDS.has(
-                    String(authenticatedUserId),
-                );
                 ensureTouAgreement(() => {
                     openEditStatusOverlay(
                         statusText === '...' ? '' : statusText,
@@ -331,6 +278,7 @@ async function addStatusBubble(avatarContainer) {
                                     await updateUserSettingViaApi(
                                         'status',
                                         newStatus,
+                                        { throwOnError: true },
                                     );
                                 if (typeof updatedValue === 'string') {
                                     updateBubbleUI(updatedValue);
@@ -346,6 +294,9 @@ async function addStatusBubble(avatarContainer) {
                                     'RoValra: Failed to update status via API.',
                                     error,
                                 );
+                                if (error?.userMessage) {
+                                    return error.userMessage;
+                                }
                                 return false;
                             }
                         },
@@ -382,19 +333,33 @@ async function addStatusBubble(avatarContainer) {
     }
 }
 
-async function addHomeStatusHover(tile) {
-    if (tile.dataset.rovalraStatusObserved) return;
-    tile.dataset.rovalraStatusObserved = 'true';
+async function addHomeStatusHover(tile, card) {
+    const userId = card?.userId;
+    const avatarContainer =
+        card?.statusAvatar ||
+        tile.querySelector(
+            '.avatar-card-fullbody, .avatar-card-image-container',
+        );
+    if (!userId || !avatarContainer) return;
+    if (tile.dataset.rovalraStatusObserved === String(userId)) return;
 
-    const link = tile.querySelector('a.avatar-card-link');
-    const avatarContainer = tile.querySelector(
-        '.avatar-card-fullbody, .avatar-card-image-container',
-    );
-    if (!link || !avatarContainer) return;
+    tile.classList.add('rovalra-status-bubble-tile');
+    avatarContainer.classList.add('rovalra-status-bubble-host');
 
-    const match = link.href.match(/\/users\/(\d+)\//);
-    if (!match) return;
-    const userId = match[1];
+    homeStatusControllers.get(tile)?.abort();
+    homeStatusControllers.delete(tile);
+
+    for (const wrapper of avatarContainer.querySelectorAll(
+        ':scope > .rovalra-status-bubble-wrapper',
+    )) {
+        if (activeHomeStatusBubble === wrapper) activeHomeStatusBubble = null;
+        cleanupStatusElements(wrapper.querySelector('.rovalra-status-bubble'));
+        wrapper.remove();
+    }
+
+    tile.dataset.rovalraStatusObserved = String(userId);
+    const controller = new AbortController();
+    homeStatusControllers.set(tile, controller);
 
     const bubbleWrapper = document.createElement('div');
     bubbleWrapper.className = 'rovalra-status-bubble-wrapper';
@@ -412,161 +377,159 @@ async function addHomeStatusHover(tile) {
     let isHovering = false;
     let pendingLoad = null;
 
-    tile.addEventListener('mouseenter', async () => {
-        isHovering = true;
+    tile.addEventListener(
+        'mouseenter',
+        async () => {
+            if (controller.signal.aborted) return;
+            isHovering = true;
 
-        if (!statusLoaded) {
-            if (pendingLoad) return;
+            if (!statusLoaded) {
+                if (pendingLoad) return;
 
-            const loadPromise = (async () => {
-                try {
-                    const authenticatedUserId = await getAuthenticatedUserId();
-                    const isOwnProfile =
-                        authenticatedUserId &&
-                        String(authenticatedUserId) === String(userId);
+                const loadPromise = (async () => {
+                    try {
+                        const currentUserId = getUserCardContext(tile).userId;
+                        if (String(currentUserId) !== String(userId)) return;
 
-                    const settings = await getUserSettings(userId);
+                        const authenticatedUserId =
+                            await getAuthenticatedUserId();
+                        const isOwnProfile =
+                            authenticatedUserId &&
+                            String(authenticatedUserId) === String(userId);
 
-                    const { status } = settings;
+                        const settings = await getUserSettings(userId);
 
-                    if (!isHovering) return;
+                        const { status } = settings;
 
-                    if (status) {
-                        let statusText = status;
-                        if (statusText.length > MAX_STATUS_LENGTH) {
-                            statusText =
-                                statusText.substring(0, MAX_STATUS_LENGTH) +
-                                '...';
+                        const latestUserId = getUserCardContext(tile).userId;
+                        if (
+                            controller.signal.aborted ||
+                            String(latestUserId) !== String(userId)
+                        ) {
+                            return;
                         }
 
-                        const isUserTrusted = TRUSTED_USER_IDS.has(
-                            String(userId),
-                        );
+                        if (!isHovering) return;
 
-                        if (isUserTrusted) {
-                            await renderTrustedStatus(bubble, statusText);
+                        if (status) {
+                            let statusText = status;
+                            if (statusText.length > MAX_STATUS_LENGTH) {
+                                statusText =
+                                    statusText.substring(0, MAX_STATUS_LENGTH) +
+                                    '...';
+                            }
+
+                            renderStatusBubbleContent(bubble, statusText);
+                            statusLoaded = true;
+
+                            if (!isOwnProfile && REPORTING_ENABLED) {
+                                bubble.style.cursor = 'pointer';
+                                addTooltip(bubble, 'Report status');
+                                bubble.onclick = (e) => {
+                                    e.stopPropagation();
+                                    showConfirmationPrompt({
+                                        title: 'Report Status',
+                                        message:
+                                            "Are you sure you want to report this user's status to RoValra moderators?",
+                                        confirmText: 'Report',
+                                        onConfirm: async () => {
+                                            try {
+                                                await reportUserContent(
+                                                    userId,
+                                                    'status',
+                                                );
+                                            } catch (error) {
+                                                console.error(
+                                                    'RoValra: Failed to report status.',
+                                                    error,
+                                                );
+                                            }
+                                        },
+                                    });
+                                };
+                            }
                         } else {
-                            bubble.innerHTML = parseUntrustedMarkdown(
-                                statusText,
-                            ).replaceAll('<br>', ''); // Verified
+                            bubbleWrapper.remove();
+                            return;
                         }
-                        statusLoaded = true;
-
-                        if (!isOwnProfile && REPORTING_ENABLED) {
-                            bubble.style.cursor = 'pointer';
-                            addTooltip(bubble, 'Report status');
-                            bubble.onclick = (e) => {
-                                e.stopPropagation();
-                                showConfirmationPrompt({
-                                    title: 'Report Status',
-                                    message:
-                                        "Are you sure you want to report this user's status to RoValra moderators?",
-                                    confirmText: 'Report',
-                                    onConfirm: async () => {
-                                        try {
-                                            await reportUserContent(
-                                                userId,
-                                                'status',
-                                            );
-                                        } catch (error) {
-                                            console.error(
-                                                'RoValra: Failed to report status.',
-                                                error,
-                                            );
-                                        }
-                                    },
-                                });
-                            };
-                        }
-                    } else {
+                    } catch (error) {
+                        if (!isHovering) return;
+                        console.error(
+                            'RoValra: Error fetching status for home page hover.',
+                            error,
+                        );
                         bubbleWrapper.remove();
                         return;
                     }
-                } catch (error) {
-                    if (!isHovering) return;
-                    console.error(
-                        'RoValra: Error fetching status for home page hover.',
-                        error,
+                })();
+
+                pendingLoad = loadPromise;
+                await loadPromise;
+                pendingLoad = null;
+            }
+
+            if (controller.signal.aborted) return;
+
+            if (statusLoaded && isHovering) {
+                if (
+                    activeHomeStatusBubble &&
+                    activeHomeStatusBubble !== bubbleWrapper
+                ) {
+                    const activeBubble = activeHomeStatusBubble.querySelector(
+                        '.rovalra-status-bubble',
                     );
-                    bubbleWrapper.remove();
-                    return;
+                    cleanupStatusElements(activeBubble);
+                    activeBubble.textContent = '';
+                    activeHomeStatusBubble.style.display = 'none';
                 }
-            })();
+                bubbleWrapper.style.display = 'flex';
+                activeHomeStatusBubble = bubbleWrapper;
 
-            pendingLoad = loadPromise;
-            await loadPromise;
-            pendingLoad = null;
-        }
+                const videos = bubble.querySelectorAll('video');
+                for (const video of videos) {
+                    video.muted = true;
+                    video.volume = 0;
 
-        if (statusLoaded && isHovering) {
-            if (
-                activeHomeStatusBubble &&
-                activeHomeStatusBubble !== bubbleWrapper
-            ) {
-                const activeBubble = activeHomeStatusBubble.querySelector(
-                    '.rovalra-status-bubble',
-                );
-                cleanupStatusElements(activeBubble);
-                activeBubble.textContent = '';
-                activeHomeStatusBubble.style.display = 'none';
+                    video.play().catch(() => { });
+                }
             }
-            bubbleWrapper.style.display = 'flex';
-            activeHomeStatusBubble = bubbleWrapper;
+        },
+        { signal: controller.signal },
+    );
 
-            const videos = bubble.querySelectorAll('video');
-            for (const video of videos) {
-                video.muted = true;
-                video.volume = 0;
+    tile.addEventListener(
+        'mouseleave',
+        () => {
+            isHovering = false;
+            cleanupStatusElements(bubble);
+            bubble.textContent = '';
+            statusLoaded = false;
 
-                video.play().catch(() => {});
-            }
-        }
-    });
-
-    tile.addEventListener('mouseleave', () => {
-        isHovering = false;
-        cleanupStatusElements(bubble);
-        bubble.textContent = '';
-        statusLoaded = false;
-
-        if (activeHomeStatusBubble === bubbleWrapper)
-            activeHomeStatusBubble = null;
-        bubbleWrapper.style.display = 'none';
-    });
+            if (activeHomeStatusBubble === bubbleWrapper)
+                activeHomeStatusBubble = null;
+            bubbleWrapper.style.display = 'none';
+        },
+        { signal: controller.signal },
+    );
 }
 
-export function init() {
+export async function init() {
+    if (!(await settings.statusBubbleEnabled)) return;
+
     migrateLegacyStatus();
+    startObserving();
 
-    chrome.storage.local.get(
-        {
-            statusBubbleEnabled: true,
-            statusBubbleHomePage: true,
-        },
-        (settings) => {
-            if (settings.statusBubbleEnabled) {
-                startObserving();
+    injectStylesheet('css/thinkingbubble.css', 'rovalra-profile-status-css');
+    const selector = '.user-profile-header-details-avatar-container:not(.rovalra-sendrobux-avatar)';
+    observeElement(selector, (el) => addStatusBubble(el), {
+        multiple: true,
 
-                injectStylesheet(
-                    'css/thinkingbubble.css',
-                    'rovalra-profile-status-css',
-                );
-                const selector =
-                    '.user-profile-header-details-avatar-container';
-                observeElement(selector, (el) => addStatusBubble(el), {
-                    multiple: true,
-                });
+    });
 
-                if (settings.statusBubbleHomePage) {
-                    observeUserCardElements();
-                    onUserCardElement(addHomeStatusHover, {
-                        exclude: [
-                            '.rovalra-donator-card',
-                            '.user-item-clickable',
-                        ],
-                    });
-                }
-            }
-        },
-    );
+    if (await settings.statusBubbleHomePage) {
+        observeUserCardElements();
+        onUserCardElement(addHomeStatusHover, {
+            exclude: ['.rovalra-donator-card', '.user-item-clickable', '.rovalra-sendrobux-profile'],
+        });
+    }
 }

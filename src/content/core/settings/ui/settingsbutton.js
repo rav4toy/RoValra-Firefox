@@ -1,10 +1,15 @@
 import { getAssets } from '../../assets.js';
+import { settings } from '../getSettings.js';
 
 let rovalraButtonAdded = false;
-
+const NAVBAR_DROPDOWN_SETTING_NAME = 'hideRoValraSettingsNavbarDropdown';
+const POPOVER_SETTINGS_LINK_SELECTOR = 'a.rbx-menu-item[href*="?rovalra=info"]';
 
 export function addCustomButton(debouncedAddPopoverButton) {
-    if (!window.location.href.includes('/my/account') || window.location.href.includes('?rovalra=')) {
+    if (
+        !window.location.href.includes('/my/account') ||
+        window.location.href.includes('?rovalra=')
+    ) {
         return;
     }
 
@@ -16,7 +21,9 @@ export function addCustomButton(debouncedAddPopoverButton) {
 
     let divider = menuList.querySelector('li.rbx-divider.thick-height');
     if (!divider) {
-        const lastMenuItem = menuList.querySelector('li.menu-option[role="tab"]:last-of-type');
+        const lastMenuItem = menuList.querySelector(
+            'li.menu-option[role="tab"]:last-of-type',
+        );
         if (!lastMenuItem) {
             if (debouncedAddPopoverButton) debouncedAddPopoverButton();
             return;
@@ -33,7 +40,9 @@ export function addCustomButton(debouncedAddPopoverButton) {
 
     if (rovalraButtonAdded) return;
 
-    const existingButton = menuList.querySelector('li.menu-option > a > span.font-caption-header[textContent="RoValra Settings"]');
+    const existingButton = menuList.querySelector(
+        'li.menu-option > a > span.font-caption-header[textContent="RoValra Settings"]',
+    );
     if (existingButton) {
         rovalraButtonAdded = true;
         return;
@@ -56,7 +65,8 @@ export function addCustomButton(debouncedAddPopoverButton) {
         if (window.location.search.includes('rovalra=')) {
             window.location.reload();
         } else {
-            window.location.href = 'https://www.roblox.com/my/account?rovalra=info#!/info';
+            window.location.href =
+                'https://www.roblox.com/my/account?rovalra=info#!/info';
         }
     });
 
@@ -66,6 +76,7 @@ export function addCustomButton(debouncedAddPopoverButton) {
     newButtonSpan.style.fontSize = '12px';
 
     const logo = document.createElement('img');
+    logo.dataset.rovalraAsset = 'rovalraIcon';
     logo.src = assets.rovalraIcon;
     logo.style.width = '15px';
     logo.style.height = '15px';
@@ -78,14 +89,43 @@ export function addCustomButton(debouncedAddPopoverButton) {
     rovalraButtonAdded = true;
 }
 
-// TODO add a setting to disable this
-export function addPopoverButton() {
-    if (window.rovalraPopoverButtonAdded) return;
+function removePopoverButton() {
+    const popoverMenu = document.getElementById('settings-popover-menu');
+    const existingLink = popoverMenu?.querySelector(
+        POPOVER_SETTINGS_LINK_SELECTOR,
+    );
+
+    existingLink?.closest('li')?.remove();
+    window.rovalraPopoverButtonAdded = false;
+}
+
+async function shouldHidePopoverButton() {
+    try {
+        return (await settings[NAVBAR_DROPDOWN_SETTING_NAME]) === true;
+    } catch (error) {
+        console.warn(
+            'RoValra: Failed to read navbar settings dropdown visibility.',
+            error,
+        );
+        return false;
+    }
+}
+
+export async function addPopoverButton() {
+    if (await shouldHidePopoverButton()) {
+        removePopoverButton();
+        return;
+    }
 
     const popoverMenu = document.getElementById('settings-popover-menu');
     if (!popoverMenu) return;
 
-    if (popoverMenu.querySelector('a[href*="?rovalra=info"]')) {
+    if (window.rovalraPopoverButtonAdded) {
+        if (popoverMenu.querySelector(POPOVER_SETTINGS_LINK_SELECTOR)) return;
+        window.rovalraPopoverButtonAdded = false;
+    }
+
+    if (popoverMenu.querySelector(POPOVER_SETTINGS_LINK_SELECTOR)) {
         window.rovalraPopoverButtonAdded = true;
         return;
     }
@@ -95,18 +135,24 @@ export function addPopoverButton() {
     const newButtonLink = document.createElement('a');
     newButtonLink.className = 'rbx-menu-item';
     newButtonLink.href = 'https://www.roblox.com/my/account?rovalra=info';
-    Object.assign(newButtonLink.style, { display: 'flex', alignItems: 'center', gap: '8px' });
+    Object.assign(newButtonLink.style, {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+    });
 
     newButtonLink.addEventListener('click', (e) => {
         e.preventDefault();
         if (window.location.search.includes('rovalra=')) {
             window.location.reload();
         } else {
-            window.location.href = 'https://www.roblox.com/my/account?rovalra=info';
+            window.location.href =
+                'https://www.roblox.com/my/account?rovalra=info';
         }
     });
 
     const logo = document.createElement('img');
+    logo.dataset.rovalraAsset = 'rovalraIcon';
     logo.src = assets.rovalraIcon;
     Object.assign(logo.style, { width: '18px', height: '18px' });
 
@@ -114,7 +160,9 @@ export function addPopoverButton() {
     newButtonLink.append(logo, buttonText);
     newButtonListItem.appendChild(newButtonLink);
 
-    const nativeSettingsLink = popoverMenu.querySelector('a.rbx-menu-item[href="/my/account"]');
+    const nativeSettingsLink = popoverMenu.querySelector(
+        'a.rbx-menu-item[href="/my/account"]',
+    );
     if (nativeSettingsLink?.parentElement) {
         nativeSettingsLink.parentElement.before(newButtonListItem);
     } else {
@@ -122,4 +170,30 @@ export function addPopoverButton() {
     }
 
     window.rovalraPopoverButtonAdded = true;
+}
+
+function handleNavbarDropdownSettingChange(value) {
+    if (value === true) {
+        removePopoverButton();
+        return;
+    }
+
+    window.rovalraPopoverButtonAdded = false;
+    addPopoverButton();
+}
+
+if (typeof document !== 'undefined') {
+    document.addEventListener('rovalra:settingSaved', (event) => {
+        if (event.detail?.name !== NAVBAR_DROPDOWN_SETTING_NAME) return;
+        handleNavbarDropdownSettingChange(event.detail.value);
+    });
+}
+
+if (typeof chrome !== 'undefined' && chrome.storage?.onChanged) {
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+        if (areaName !== 'local') return;
+        const change = changes[NAVBAR_DROPDOWN_SETTING_NAME];
+        if (!change) return;
+        handleNavbarDropdownSettingChange(change.newValue);
+    });
 }

@@ -1,5 +1,6 @@
 // adds the server ids to the server elements so we know what is what
 import { observeElement } from '../../observer.js';
+import { dispatchPageEvent } from '../../firefox/pageBridge.js';
 
 let extractorScriptInjected = false;
 
@@ -36,11 +37,9 @@ async function extractServerIdFromFiber(server) {
         };
         window.addEventListener('rovalra-serverid-extracted', listener);
 
-        window.dispatchEvent(
-            new CustomEvent('rovalra-extract-serverid-request', {
-                detail: { extractionId },
-            }),
-        );
+        dispatchPageEvent(window, 'rovalra-extract-serverid-request', {
+            extractionId,
+        });
 
         setTimeout(() => {
             window.removeEventListener('rovalra-serverid-extracted', listener);

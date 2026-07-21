@@ -187,6 +187,27 @@
     }
 }
 
+.game-badges-list {
+    .container-header {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 12px;
+        padding-right: 0;
+
+        &::before,
+        &::after {
+            content: none;
+            display: none;
+        }
+    }
+
+    .rovalra-pill-toggle {
+        margin-top: 8px;
+        margin-bottom: 6px;
+    }
+}
+
 div.game-stat-container.rovalra-horizontal-stats,
 ul.game-stat-container.rovalra-horizontal-stats {
     display: flex;
@@ -798,10 +819,9 @@ li.rovalra-offsale-toggle-item {
     }
 }
 
-:root:has(.light-theme),
+body.light-theme,
 :root.light-theme,
-:root[color-scheme='light'],
-:root:has(meta[name='theme-color'][content='#F9F9F9']) {
+:root[color-scheme='light'] {
     .rovalra-voting-controls {
         .vote-container {
             .vote-background.has-votes {

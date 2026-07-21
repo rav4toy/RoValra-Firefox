@@ -1,4 +1,4 @@
-import { getAssets } from '../assets.js';
+import { getAssets, isUsingOldRovalraLogo } from '../assets.js';
 import {
     CREATOR_USER_ID,
     CONTRIBUTOR_USER_IDS,
@@ -14,14 +14,69 @@ import {
 } from './userIds.js';
 
 const assets = getAssets();
+const ROVALRA_LOGO_ASSET_NAME = 'rovalraIcon';
+const DONATOR_BADGE_STYLES = {
+    contributor: {
+        filter: 'sepia(80%) saturate(300%) brightness(90%) hue-rotate(-20deg)',
+    },
+    legacy_donator: {
+        filter: 'sepia(100%) saturate(600%) brightness(90%) hue-rotate(5deg)',
+    },
+    donator_1: {
+        filter: 'sepia(1) saturate(1.8) hue-rotate(-35deg) brightness(0.8) contrast(1.2)',
+    },
+    donator_2: {
+        filter: 'grayscale(1) brightness(1.3) contrast(1.2)',
+    },
+    donator_3: {
+        filter: 'sepia(1) saturate(3) hue-rotate(5deg) brightness(1.1)',
+    },
+};
+
+function getDonatorBadgeStyle(badgeName) {
+    return isUsingOldRovalraLogo() ? DONATOR_BADGE_STYLES[badgeName] || {} : {};
+}
+
+function applyDynamicBadgeAssets() {
+    for (const [badgeName, badge] of Object.entries(BADGE_CONFIG)) {
+        badge.id = badgeName;
+
+        if (badge.iconAssetName) {
+            Object.defineProperty(badge, 'icon', {
+                enumerable: true,
+                get() {
+                    return getAssets()[badge.iconAssetName];
+                },
+            });
+        }
+
+        if (badge.confettiAssetName) {
+            Object.defineProperty(badge, 'confetti', {
+                enumerable: true,
+                get() {
+                    return getAssets()[badge.confettiAssetName];
+                },
+            });
+        }
+
+        if (badge.oldLogoStyleName) {
+            Object.defineProperty(badge, 'style', {
+                enumerable: true,
+                get() {
+                    return getDonatorBadgeStyle(badge.oldLogoStyleName);
+                },
+            });
+        }
+    }
+}
 
 export const BADGE_CONFIG = {
     creator: {
         type: 'header',
         userIds: [CREATOR_USER_ID],
-        icon: assets.rovalraIcon,
+        iconAssetName: ROVALRA_LOGO_ASSET_NAME,
         tooltip: 'Creator of RoValra',
-        confetti: assets.rovalraIcon,
+        confettiAssetName: ROVALRA_LOGO_ASSET_NAME,
         style: {},
         alwaysShow: true,
         shiny: true,
@@ -29,13 +84,45 @@ export const BADGE_CONFIG = {
     contributor: {
         type: 'header',
         userIds: CONTRIBUTOR_USER_IDS,
-        icon: assets.rovalraIcon,
+        iconAssetName: 'contributorIcon',
         tooltip: 'RoValra Contributor',
-        confetti: assets.rovalraIcon,
-        style: {
-            filter: 'sepia(80%) saturate(300%) brightness(90%) hue-rotate(-20deg)',
-        },
+        confettiAssetName: 'contributorIcon',
+        oldLogoStyleName: 'contributor',
         shiny: true,
+        grayGlimmer: true,
+        sparkles: true,
+        themeColorIcon: true,
+    },
+    video_star: {
+        type: 'header',
+        userIds: [],
+        iconAssetName: 'videoStarIcon',
+        tooltip: 'Roblox Video Star',
+        confettiAssetName: 'videoStarIcon',
+        shiny: false,
+        sparkles: false,
+        themeColorIcon: true,
+        size: '22px',
+    },
+    community_feedback_program: {
+        type: 'header',
+        userIds: [],
+        iconAssetName: 'communityFeedbackProgramIcon',
+        tooltip: 'Roblox Community Feedback Program',
+        shiny: false,
+        sparkles: false,
+        themeColorIcon: true,
+        size: '22px',
+    },
+    creator_events: {
+        type: 'header',
+        userIds: [],
+        iconAssetName: 'creatorEventsIcon',
+        tooltip: 'Roblox Creator Events',
+        shiny: false,
+        sparkles: false,
+        themeColorIcon: true,
+        size: '22px',
     },
     translator: {
         type: 'header',
@@ -71,19 +158,19 @@ export const BADGE_CONFIG = {
     gilbert: {
         type: 'badge',
         userIds: [CREATOR_USER_ID],
-        icon: assets.rovalraIcon,
+        iconAssetName: ROVALRA_LOGO_ASSET_NAME,
         name: 'Gilbert',
         tooltip: 'Creator of RoValra',
-        confetti: assets.rovalraIcon,
+        confettiAssetName: ROVALRA_LOGO_ASSET_NAME,
         alwaysShow: true,
     },
     gilbertmaker: {
         type: 'badge',
         userIds: [GILBERT_USER_ID],
-        icon: assets.rovalraIcon,
+        icon: assets.oldRovalraIcon,
         name: 'Gilbert',
-        tooltip: 'Maker of Fisch, where Gilbert comes from',
-        confetti: assets.rovalraIcon,
+        tooltip: 'Maker of Fisch, where Gilbert (an older icon of RoValra) comes from',
+        confetti: assets.oldRovalraIcon,
     },
     rat: {
         type: 'badge',
@@ -145,44 +232,40 @@ export const BADGE_CONFIG = {
     legacy_donator: {
         type: 'header',
         userIds: [],
-        icon: assets.rovalraIcon,
+        iconAssetName: 'donatorDiamondIcon',
         tooltip:
             'Legacy Donator. Earned by donating to RoValra before donator badges were a thing.',
-        confetti: assets.rovalraIcon,
-        style: {
-            filter: 'sepia(100%) saturate(600%) brightness(90%) hue-rotate(5deg)',
-        },
+        confettiAssetName: 'donatorDiamondIcon',
+        oldLogoStyleName: 'legacy_donator',
         shiny: true,
     },
     donator_1: {
         type: 'header',
         userIds: [],
-        icon: assets.rovalraIcon,
+        iconAssetName: 'donatorTier1Icon',
         tooltip:
             "Donated any amount of Robux to help Support RoValra's development.",
         url: 'https://www.roblox.com/games/store-section/9452973012',
-        style: {
-            filter: 'sepia(1) saturate(1.8) hue-rotate(-35deg) brightness(0.8) contrast(1.2)',
-        },
+        oldLogoStyleName: 'donator_1',
     },
     donator_2: {
         type: 'header',
         userIds: [],
-        icon: assets.rovalraIcon,
+        iconAssetName: 'donatorTier2Icon',
         tooltip:
             "Donated 200 or more Robux to help Support RoValra's development.",
         url: 'https://www.roblox.com/games/store-section/9452973012',
-        style: { filter: 'grayscale(1) brightness(1.3) contrast(1.2)' },
+        oldLogoStyleName: 'donator_2',
     },
     donator_3: {
         type: 'header',
         userIds: [],
-        icon: assets.rovalraIcon,
+        iconAssetName: 'donatorTier3Icon',
         tooltip:
             "Donated 500 or more Robux to help Support RoValra's development.",
         url: 'https://www.roblox.com/games/store-section/9452973012',
-        style: {
-            filter: 'sepia(1) saturate(3) hue-rotate(5deg) brightness(1.1)',
-        },
+        oldLogoStyleName: 'donator_3',
     },
 };
+
+applyDynamicBadgeAssets();

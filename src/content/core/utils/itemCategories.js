@@ -3,49 +3,74 @@ import { callRobloxApiJson } from '../api.js';
 let categoriesCache = null;
 let pendingPromise = null;
 
-function cloneItemCategoryData(data) {
-    try {
-        return JSON.parse(JSON.stringify(data || []));
-    } catch (e) {
-        return Array.isArray(data) ? data.map((item) => ({ ...item })) : [];
-    }
-}
-
-
 async function fetchCategories() {
     if (categoriesCache) return categoriesCache;
     if (pendingPromise) return pendingPromise;
 
     pendingPromise = (async () => {
         try {
-            const rawData = await callRobloxApiJson({
+            const data = await callRobloxApiJson({
                 subdomain: 'catalog',
                 endpoint: '/v1/categories',
-                method: 'GET'
+                method: 'GET',
             });
 
-            const data = cloneItemCategoryData(rawData);
             const processed = [];
-            const classicSubcats = ['ClassicShirts', 'ClassicTShirts', 'ClassicPants'];
-            
-            for (const cat of data) {
+            const classicSubcats = [
+                'ClassicShirts',
+                'ClassicTShirts',
+                'ClassicPants',
+            ];
+
+            for (const rawCategory of Array.isArray(data) ? data : []) {
+                const cat = {
+                    ...rawCategory,
+                    assetTypeIds: Array.isArray(rawCategory.assetTypeIds)
+                        ? [...rawCategory.assetTypeIds]
+                        : [],
+                    bundleTypeIds: Array.isArray(rawCategory.bundleTypeIds)
+                        ? [...rawCategory.bundleTypeIds]
+                        : [],
+                    subcategories: Array.isArray(rawCategory.subcategories)
+                        ? rawCategory.subcategories.map((subcategory) => ({
+                              ...subcategory,
+                              assetTypeIds: Array.isArray(
+                                  subcategory.assetTypeIds,
+                              )
+                                  ? [...subcategory.assetTypeIds]
+                                  : [],
+                              bundleTypeIds: Array.isArray(
+                                  subcategory.bundleTypeIds,
+                              )
+                                  ? [...subcategory.bundleTypeIds]
+                                  : [],
+                          }))
+                        : [],
+                };
+
                 if (cat.category === 'Clothing') {
                     const clothingSubcats = [];
                     const classicSubcategoryObjects = [];
                     const classicAssetTypeIds = new Set();
 
-                    cat.subcategories.forEach(sub => {
+                    cat.subcategories.forEach((sub) => {
                         if (classicSubcats.includes(sub.subcategory)) {
                             classicSubcategoryObjects.push(sub);
-                            if (sub.assetTypeIds) sub.assetTypeIds.forEach(id => classicAssetTypeIds.add(id));
+                            sub.assetTypeIds.forEach((id) =>
+                                classicAssetTypeIds.add(id),
+                            );
                         } else {
                             clothingSubcats.push(sub);
                         }
                     });
 
-                    cat.subcategories = clothingSubcats;
-                    cat.assetTypeIds = cat.assetTypeIds.filter(id => !classicAssetTypeIds.has(id));
-                    processed.push(cat);
+                    processed.push({
+                        ...cat,
+                        subcategories: clothingSubcats,
+                        assetTypeIds: cat.assetTypeIds.filter(
+                            (id) => !classicAssetTypeIds.has(id),
+                        ),
+                    });
 
                     if (classicSubcategoryObjects.length > 0) {
                         processed.push({
@@ -56,14 +81,14 @@ async function fetchCategories() {
                             name: 'Classic Clothing',
                             orderIndex: cat.orderIndex,
                             subcategories: classicSubcategoryObjects,
-                            isSearchable: true
+                            isSearchable: true,
                         });
                     }
                 } else {
                     processed.push(cat);
                 }
             }
-            
+
             categoriesCache = processed;
             return processed;
         } catch (error) {
@@ -82,28 +107,36 @@ export async function getAllCategories() {
 
 export async function getIdsByCategory(categoryName) {
     const categories = await fetchCategories();
-    const cat = categories.find(c => c.category === categoryName || c.name === categoryName);
-    
+    const cat = categories.find(
+        (category) =>
+            category.category === categoryName ||
+            category.name === categoryName,
+    );
+
     if (!cat) return null;
-    
+
     return {
         assetTypeIds: cat.assetTypeIds || [],
-        bundleTypeIds: cat.bundleTypeIds || []
+        bundleTypeIds: cat.bundleTypeIds || [],
     };
 }
 
 export async function getIdsBySubcategory(subcategoryName) {
     const categories = await fetchCategories();
-    
+
     for (const cat of categories) {
-        const sub = cat.subcategories.find(s => s.subcategory === subcategoryName || s.name === subcategoryName);
+        const sub = (cat.subcategories || []).find(
+            (subcategory) =>
+                subcategory.subcategory === subcategoryName ||
+                subcategory.name === subcategoryName,
+        );
         if (sub) {
             return {
                 assetTypeIds: sub.assetTypeIds || [],
-                bundleTypeIds: sub.bundleTypeIds || []
+                bundleTypeIds: sub.bundleTypeIds || [],
             };
         }
     }
-    
+
     return null;
 }

@@ -6,17 +6,23 @@ import { HBAClient } from 'roblox-bat';
 import { getValidAccessToken } from './oauth/oauth.js';
 import { getValidApiKey, invalidateApiKey } from './utils/trackers/apiKey.js';
 import { showSystemAlert } from './ui/roblox/alert.js';
-import { headersToPlainObject, isFirefox, pageFetch } from './firefox/compat.js';
+import { fetchInBackground } from './backgroundFetch.js';
+import { cloneIntoExtensionRealm } from './firefox/realm.js';
 
 import { updateUserLocationIfChanged } from './utils/location.js';
 const activeRequests = new Map();
 let gameJoinErrorCount = 0;
 let lastGameJoinRequestTime = 0;
+const GAMEJOIN_TIMEOUT_MS = 2000;
+const GAMEJOIN_V2_FLAG_URL = 'https://apis.rovalra.com/v1/gamejoin-v2/';
+const TEMPORARILY_LIMITED_MESSAGE =
+    'Your account has been temporarily limited for violating terms of service.';
 
 const OAUTH_STORAGE_KEY = 'rovalra_oauth_verification';
-const CAPTURED_APIS_KEY = 'rovalra_captured_apis';
-const seenRequests = new Map();
 let cachedRovalraUserAgent = null;
+let gameJoinVersionNavigationKey = null;
+let gameJoinVersionPromise = null;
+let gameJoinUseV2 = true;
 
 const hbaClient = new HBAClient({
     onSite: true,
@@ -59,107 +65,6 @@ function getRovalraUserAgent() {
     return cachedRovalraUserAgent;
 }
 
-document.addEventListener('rovalra-traffic-capture', (e) => {
-    const { url, method, body } = e.detail;
-    try {
-        const urlObj = new URL(url);
-        const hostname = urlObj.hostname;
-        const pathname = urlObj.pathname + urlObj.search;
-
-        let subdomain = 'apis';
-        let isRovalraApi = false;
-
-        if (hostname.endsWith('.roblox.com')) {
-            subdomain = hostname.replace('.roblox.com', '');
-        } else if (hostname.includes('rovalra.com')) {
-            isRovalraApi = true;
-            subdomain = 'apis';
-        } else {
-            return;
-        }
-
-        captureApiCall({
-            subdomain,
-            endpoint: pathname,
-            method,
-            isRovalraApi,
-            body,
-        });
-    } catch (err) {}
-});
-
-function captureApiCall(options) {
-    try {
-        const {
-            subdomain = 'apis',
-            endpoint,
-            method = 'GET',
-            isRovalraApi = false,
-            body = null,
-        } = options;
-        if (!endpoint) return;
-
-        const [baseEndpoint] = endpoint.split('?');
-        const category = isRovalraApi ? 'rovalra.com' : subdomain || 'apis';
-        const methodUpper = method.toUpperCase();
-        const key = `${category}|${baseEndpoint}|${methodUpper}`;
-        const hasParams = endpoint.includes('?');
-
-        if (seenRequests.has(key)) {
-            const seenWithParams = seenRequests.get(key);
-            if (seenWithParams || !hasParams) return;
-        }
-        seenRequests.set(key, hasParams || seenRequests.get(key) || false);
-
-        chrome.storage.local.get(
-            [CAPTURED_APIS_KEY, 'EnableRobloxApiDocs'],
-            (result) => {
-                if (!result.EnableRobloxApiDocs) return;
-
-                const data = result[CAPTURED_APIS_KEY] || {};
-                let changed = false;
-
-                if (!data[category]) {
-                    data[category] = {};
-                    changed = true;
-                }
-
-                if (!data[category][baseEndpoint]) {
-                    data[category][baseEndpoint] = {};
-                    changed = true;
-                }
-
-                if (!data[category][baseEndpoint][methodUpper]) {
-                    data[category][baseEndpoint][methodUpper] = {
-                        exampleBody: body,
-                        exampleEndpoint: endpoint,
-                    };
-                    changed = true;
-                } else {
-                    const currentDetails =
-                        data[category][baseEndpoint][methodUpper];
-                    if (
-                        hasParams &&
-                        (!currentDetails.exampleEndpoint ||
-                            !currentDetails.exampleEndpoint.includes('?'))
-                    ) {
-                        currentDetails.exampleEndpoint = endpoint;
-                        changed = true;
-                    }
-                    if (body && !currentDetails.exampleBody) {
-                        currentDetails.exampleBody = body;
-                        changed = true;
-                    }
-                }
-
-                if (changed) {
-                    chrome.storage.local.set({ [CAPTURED_APIS_KEY]: data });
-                }
-            },
-        );
-    } catch (e) {}
-}
-
 function getRequestKey({
     endpoint,
     subdomain = 'apis',
@@ -174,6 +79,214 @@ function getRequestKey({
     const headersStr = JSON.stringify(headers || {});
     const target = fullUrl || `${isRovalraApi}|${subdomain}|${endpoint}`;
     return `${target}|${method.toUpperCase()}|${bodyStr}|${headersStr}`;
+}
+
+function getCurrentNavigationKey() {
+    if (typeof window === 'undefined') return '';
+    return window.location.href;
+}
+
+function parseGameJoinV2Flag(data) {
+    if (typeof data === 'boolean') return data;
+    if (typeof data === 'string') {
+        const normalized = data.trim().toLowerCase();
+        if (normalized === 'true') return true;
+        if (normalized === 'false') return false;
+    }
+    if (data && typeof data === 'object') {
+        if (typeof data.enabled === 'boolean') return data.enabled;
+        if (typeof data.useV2 === 'boolean') return data.useV2;
+        if (typeof data.gamejoinV2 === 'boolean') return data.gamejoinV2;
+    }
+    return true;
+}
+
+async function fetchGameJoinV2Flag() {
+    try {
+        const response = await fetchInBackground(
+            `${GAMEJOIN_V2_FLAG_URL}?_RoValraRequest`,
+            {
+                method: 'GET',
+                credentials: 'omit',
+                cache: 'no-store',
+                headers: {
+                    Accept: 'application/json',
+                    'x-rovalra-user-agent': getRovalraUserAgent(),
+                },
+            },
+        );
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const text = await response.text();
+        let data = text;
+        try {
+            data = JSON.parse(text);
+        } catch (e) {}
+
+        gameJoinUseV2 = parseGameJoinV2Flag(data);
+    } catch (error) {
+        gameJoinUseV2 = true;
+        console.warn(
+            'RoValra API: Failed to fetch gamejoin version flag. Falling back to v2.',
+            error,
+        );
+    }
+
+    return gameJoinUseV2;
+}
+
+function refreshGameJoinVersionPreference() {
+    const navigationKey = getCurrentNavigationKey();
+    if (
+        gameJoinVersionPromise &&
+        gameJoinVersionNavigationKey === navigationKey
+    ) {
+        return gameJoinVersionPromise;
+    }
+
+    gameJoinVersionNavigationKey = navigationKey;
+    gameJoinVersionPromise = fetchGameJoinV2Flag();
+    return gameJoinVersionPromise;
+}
+
+function setupGameJoinVersionNavigationRefresh() {
+    if (
+        typeof window === 'undefined' ||
+        window.__rovalraGameJoinVersionNavigationRefresh
+    ) {
+        return;
+    }
+
+    window.__rovalraGameJoinVersionNavigationRefresh = true;
+    const refreshSoon = () => {
+        queueMicrotask(() => {
+            refreshGameJoinVersionPreference();
+        });
+    };
+
+    const originalPushState = history.pushState;
+    const originalReplaceState = history.replaceState;
+
+    history.pushState = function (...args) {
+        const result = originalPushState.apply(this, args);
+        refreshSoon();
+        return result;
+    };
+
+    history.replaceState = function (...args) {
+        const result = originalReplaceState.apply(this, args);
+        refreshSoon();
+        return result;
+    };
+
+    window.addEventListener('popstate', refreshSoon);
+    window.addEventListener('hashchange', refreshSoon);
+    window.addEventListener('pageshow', refreshSoon);
+    window.addEventListener('rovalra:locationchange', refreshSoon);
+
+    refreshGameJoinVersionPreference();
+}
+
+setupGameJoinVersionNavigationRefresh();
+
+function normalizeGameJoinEndpoint(endpoint, useV2 = true) {
+    if (typeof endpoint !== 'string') return endpoint;
+    return endpoint.replace(/^\/v[12]\//, useV2 ? '/v2/' : '/v1/');
+}
+
+function isGameJoinTimeoutEnabled(endpoint) {
+    if (typeof endpoint !== 'string') return true;
+    return endpoint.split('?')[0].replace(/^\/v[12]\//, '/') !== '/join-game';
+}
+
+function createGameJoinFullResponse() {
+    return new Response(
+        JSON.stringify({
+            status: 22,
+            message: 'Server full',
+            rovalraTimedOut: true,
+        }),
+        {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+        },
+    );
+}
+
+function parseServerSentEvents(text) {
+    const events = [];
+    const blocks = String(text || '').split(/\r?\n\r?\n/);
+
+    for (const block of blocks) {
+        if (!block.trim()) continue;
+
+        const event = { event: 'message', data: '' };
+        const dataLines = [];
+
+        for (const rawLine of block.split(/\r?\n/)) {
+            if (!rawLine || rawLine.startsWith(':')) continue;
+
+            const separatorIndex = rawLine.indexOf(':');
+            let field = rawLine;
+            let value = '';
+
+            if (separatorIndex !== -1) {
+                field = rawLine.slice(0, separatorIndex);
+                value = rawLine.slice(separatorIndex + 1);
+                if (value.charCodeAt(0) === 32) value = value.slice(1);
+            }
+
+            if (field === 'event') event.event = value;
+            else if (field === 'id') event.id = value;
+            else if (field === 'retry') event.retry = value;
+            else if (field === 'data') dataLines.push(value);
+        }
+
+        event.data = dataLines.join('\n');
+        events.push(event);
+    }
+
+    return events;
+}
+
+async function normalizeGameJoinResponse(response) {
+    const contentType = (
+        response.headers.get('Content-Type') || ''
+    ).toLowerCase();
+    if (!contentType.includes('text/event-stream')) return response;
+
+    const text = await response.text();
+    const events = parseServerSentEvents(text);
+    const readyEvent =
+        events.find((event) => event.event === 'ResponseReady') ||
+        events.find((event) => event.data?.trim());
+
+    if (!readyEvent?.data) {
+        return new Response(JSON.stringify({ status: 0 }), {
+            status: response.status,
+            statusText: response.statusText,
+            headers: { 'Content-Type': 'application/json' },
+        });
+    }
+
+    try {
+        JSON.parse(readyEvent.data);
+    } catch (e) {
+        return new Response(JSON.stringify({ status: 0 }), {
+            status: response.status,
+            statusText: response.statusText,
+            headers: { 'Content-Type': 'application/json' },
+        });
+    }
+
+    return new Response(readyEvent.data, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: { 'Content-Type': 'application/json' },
+    });
 }
 
 function checkSimulatedDowntime() {
@@ -245,7 +358,40 @@ export function resetGameJoinErrorCount() {
 }
 
 export async function callRobloxApi(options) {
-    captureApiCall(options);
+    if (options.subdomain === 'gamejoin') {
+        const useGameJoinV2 = await refreshGameJoinVersionPreference();
+        options = {
+            ...options,
+            endpoint: normalizeGameJoinEndpoint(
+                options.endpoint,
+                useGameJoinV2,
+            ),
+        };
+    }
+
+    if (
+        options.subdomain === 'gamejoin' &&
+        (options.method || 'GET').toUpperCase() === 'POST'
+    ) {
+        if (
+            options.body &&
+            typeof options.body === 'object' &&
+            !(options.body instanceof FormData)
+        ) {
+            const bodyUpdate = {};
+            if (options.endpoint?.split('?')[0].startsWith('/v2/')) {
+                bodyUpdate.joinOrigin = 'RoValraFetchInfo';
+            }
+            if (!options.body.gameJoinAttemptId) {
+                bodyUpdate.gameJoinAttemptId = self.crypto.randomUUID();
+            }
+
+            options = {
+                ...options,
+                body: { ...options.body, ...bodyUpdate },
+            };
+        }
+    }
 
     if (options.subdomain === 'gamejoin') {
         const now = Date.now();
@@ -268,13 +414,6 @@ export async function callRobloxApi(options) {
         const originalResponse = await activeRequests.get(requestKey);
         const clonedResponse = originalResponse.clone();
 
-        if (
-            options.subdomain === 'games' &&
-            options.endpoint.includes('/servers/') &&
-            !options.isRovalraApi
-        ) {
-        }
-
         return clonedResponse;
     }
 
@@ -292,6 +431,7 @@ export async function callRobloxApi(options) {
             useBackground = false,
             useApiKey = false,
             noCache = false,
+            responseType = 'text',
         } = options;
 
         const normalizedHeaders = new Headers(headers);
@@ -310,33 +450,24 @@ export async function callRobloxApi(options) {
             }
         }
 
-        if (useBackground) {
-            return new Promise((resolve) => {
-                chrome.runtime.sendMessage(
-                    {
-                        action: 'fetchRobloxApi',
-                        options: {
-                            endpoint,
-                            subdomain,
-                            method,
-                            body,
-                            headers: headersToPlainObject(normalizedHeaders),
-                            noCache,
-                        },
-                    },
-                    (response) => {
-                        if (chrome.runtime.lastError || !response) {
-                            resolve(Response.error());
-                            return;
-                        }
-                        if (useApiKey && response.status === 401) {
-                            invalidateApiKey();
-                        }
-                        const { body, ...init } = response;
-                        resolve(new Response(body, init));
-                    },
-                );
-            });
+        if (useBackground && !isRovalraApi) {
+            const backgroundUrl =
+                customFullUrl || `https://${subdomain}.roblox.com${endpoint}`;
+            const response = await fetchInBackground(
+                backgroundUrl,
+                {
+                    method,
+                    body,
+                    headers: normalizedHeaders,
+                    credentials: options.credentials ?? 'include',
+                    cache: noCache ? 'no-store' : 'default',
+                },
+                responseType,
+            );
+            if (useApiKey && response.status === 401) {
+                invalidateApiKey();
+            }
+            return response;
         }
 
         if (isRovalraApi && subdomain === 'apis') {
@@ -482,7 +613,11 @@ export async function callRobloxApi(options) {
             let authRetried = false;
             for (let attempt = 0; attempt < 4; attempt++) {
                 try {
-                    lastResponse = await fetch(fullUrl, fetchOptions);
+                    lastResponse = await fetchInBackground(
+                        fullUrl,
+                        fetchOptions,
+                        responseType,
+                    );
                     let newAccessToken = null;
                     try {
                         const bodyClone = await lastResponse.clone().json();
@@ -613,7 +748,7 @@ export async function callRobloxApi(options) {
                     await new Promise((res) => setTimeout(res, 1000));
                 }
             }
-            if (!lastResponse.ok && lastResponse.status !== 499) {
+            if (!lastResponse.ok) {
                 console.error(
                     `RoValra API: Request to ${fullUrl} failed with status ${lastResponse.status} after multiple retries.`,
                 );
@@ -628,10 +763,52 @@ export async function callRobloxApi(options) {
             }
         }
 
+        let timeoutId = null;
+        let abortSignalCleanup = null;
+        let didGameJoinTimeout = false;
+        const shouldUseGameJoinTimeout =
+            subdomain === 'gamejoin' && isGameJoinTimeoutEnabled(endpoint);
+
+        if (shouldUseGameJoinTimeout) {
+            const controller = new AbortController();
+            timeoutId = setTimeout(() => {
+                didGameJoinTimeout = true;
+                controller.abort();
+            }, GAMEJOIN_TIMEOUT_MS);
+
+            if (signal) {
+                if (signal.aborted) {
+                    controller.abort();
+                } else {
+                    abortSignalCleanup = () => controller.abort();
+                    signal.addEventListener('abort', abortSignalCleanup, {
+                        once: true,
+                    });
+                }
+            }
+
+            fetchOptions.signal = controller.signal;
+        }
+
+        const cleanupGameJoinTimeout = () => {
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+                timeoutId = null;
+            }
+            if (signal && abortSignalCleanup) {
+                signal.removeEventListener('abort', abortSignalCleanup);
+                abortSignalCleanup = null;
+            }
+        };
+
         let response;
         try {
             response = await fetch(fullUrl, fetchOptions);
         } catch (error) {
+            cleanupGameJoinTimeout();
+            if (didGameJoinTimeout) {
+                return createGameJoinFullResponse();
+            }
             if (error.name === 'AbortError' || (signal && signal.aborted)) {
                 return new Response(null, {
                     status: 499,
@@ -650,6 +827,10 @@ export async function callRobloxApi(options) {
                 try {
                     response = await fetch(fullUrl, fetchOptions);
                 } catch (error) {
+                    cleanupGameJoinTimeout();
+                    if (didGameJoinTimeout) {
+                        return createGameJoinFullResponse();
+                    }
                     if (
                         error.name === 'AbortError' ||
                         (signal && signal.aborted)
@@ -664,7 +845,20 @@ export async function callRobloxApi(options) {
             }
         }
 
-        if (!response.ok && response.status !== 499) {
+        try {
+            if (subdomain === 'gamejoin') {
+                response = await normalizeGameJoinResponse(response);
+            }
+        } catch (error) {
+            if (didGameJoinTimeout) {
+                return createGameJoinFullResponse();
+            }
+            throw error;
+        } finally {
+            cleanupGameJoinTimeout();
+        }
+
+        if (!response.ok) {
             console.error(
                 `RoValra API: Request to ${fullUrl} failed with status ${response.status}.`,
             );
@@ -679,7 +873,7 @@ export async function callRobloxApi(options) {
 
     if (shouldCache) {
         activeRequests.set(requestKey, requestPromise);
-        requestPromise.finally(() => activeRequests.delete(requestKey)).catch(() => {});
+        requestPromise.finally(() => activeRequests.delete(requestKey));
     }
 
     let originalResponse;
@@ -840,18 +1034,22 @@ export async function callRobloxApiJson(options) {
     if (!response.ok) {
         const errorBody = await response
             .json()
+            .then(cloneIntoExtensionRealm)
             .catch(() => ({ message: 'Could not parse error response' }));
 
         if (options.isRovalraApi) {
             const message = errorBody?.message || errorBody?.error;
             if (
+                message === TEMPORARILY_LIMITED_MESSAGE ||
                 message ===
                     'This feature has been disabled for your account due to moderation.' ||
                 message ===
                     'Your account has been suspended for violating terms of service.'
             ) {
                 showSystemAlert(
-                    'This feature has been disabled due to your violation of the RoValra terms of service.',
+                    message === TEMPORARILY_LIMITED_MESSAGE
+                        ? 'Your account has been temporarily limited. Check Account Standing for details.'
+                        : 'This feature has been disabled due to your violation of the RoValra terms of service.',
                     'warning',
                 );
             }
@@ -864,5 +1062,5 @@ export async function callRobloxApiJson(options) {
         error.status = response.status;
         throw error;
     }
-    return await response.json();
+    return cloneIntoExtensionRealm(await response.json());
 }

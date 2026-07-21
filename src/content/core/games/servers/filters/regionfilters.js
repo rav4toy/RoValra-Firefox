@@ -10,7 +10,8 @@ import {
     getStateCodeFromRegion,
 } from '../../../regions.js';
 import { createButton } from '../../../ui/buttons.js';
-import { showReviewPopup } from '../../../review/review.js';
+import { getCountryFlagImageUrl } from '../../../ui/flags.js';
+import { showRegionDonationPopup } from '../../../review/review.js';
 import DOMPurify from 'dompurify';
 
 const DEFAULT_PLACE_ID = window.ROVALRA_PLACE_ID;
@@ -178,9 +179,8 @@ async function cacheFlag(countryCode) {
     const code = countryCode.toLowerCase();
     if (State.flags[code]) return;
     try {
-        const response = await fetch(`https://flagcdn.com/w40/${code}.png`);
-        const blob = await response.blob();
-        State.flags[code] = URL.createObjectURL(blob);
+        const safeFlagUrl = await getCountryFlagImageUrl(code, 'w40');
+        if (safeFlagUrl) State.flags[code] = safeFlagUrl;
     } catch (e) {
         console.warn('RoValra: Failed to cache flag for', code);
     }
@@ -414,7 +414,7 @@ function createGlobePanel(container) {
     const panel = document.createElement('div');
     panel.id = GLOBE_PANEL_ID;
     panel.className = theme;
-    panel.innerHTML = `<div class="rovalra-globe-header ${theme}"><img src="${assets.rovalraIcon}" class="rovalra-header-logo" title="RoValra" id="${EASTER_EGG_TRIGGER_ID}" alt="Logo"><div id="${HEADER_TITLE_ID}" style="font-weight:bold;">RoValra Region Selector</div></div><div id="${GLOBE_CONTAINER_ID}"></div>`;
+    panel.innerHTML = `<div class="rovalra-globe-header ${theme}"><img data-rovalra-asset="rovalraIcon" src="${assets.rovalraIcon}" class="rovalra-header-logo" title="RoValra" id="${EASTER_EGG_TRIGGER_ID}" alt="Logo"><div id="${HEADER_TITLE_ID}" style="font-weight:bold;">RoValra Region Selector</div></div><div id="${GLOBE_CONTAINER_ID}"></div>`;
     container.appendChild(panel);
 
     const globeContainer = panel.querySelector(`#${GLOBE_CONTAINER_ID}`);
@@ -688,7 +688,7 @@ async function getAndCacheServerRegion(server, placeId) {
     try {
         const res = await callRobloxApiJson({
             subdomain: 'gamejoin',
-            endpoint: '/v1/join-game-instance',
+            endpoint: '/v2/join-game-instance',
             method: 'POST',
             body: {
                 placeId: parseInt(placeId, 10),
@@ -790,10 +790,12 @@ function handleGlobeHover(e) {
     const dcCount = State.dataCenterCounts[regionCode] || 0;
     let flagSrc = State.flags[countryCode];
     if (!flagSrc) {
-        flagSrc = `https://flagcdn.com/w40/${countryCode}.png`;
-        cacheFlag(countryCode);
+        void cacheFlag(countryCode);
     }
-    tooltip.innerHTML = `<div style="display: flex; align-items: center; justify-content: center; gap: 6px; margin-bottom: 2px;"><img src="${flagSrc}" style="width: 20px; height: 13px; border-radius: 2px;"><span style="font-weight: 600; font-size: 12px; color: #eee;">${city}</span></div><div style="display: flex; flex-direction: column; align-items: center; gap: 0px; font-size: 11px; color: #ccc; border-top: 1px solid rgba(255,255,255,0.15); padding-top: 3px; width: 100%;"><span>Servers: <b style="color:#fff;">${serverCount.toLocaleString()}</b></span>${dcCount > 0 ? `<span>Datacenters: <b style="color:#fff;">${dcCount.toLocaleString()}</b></span>` : ''}</div>`;
+    const flagMarkup = flagSrc
+        ? `<img src="${flagSrc}" style="width: 20px; height: 13px; border-radius: 2px;">`
+        : '<span style="display: inline-block; width: 20px; height: 13px;"></span>';
+    tooltip.innerHTML = `<div style="display: flex; align-items: center; justify-content: center; gap: 6px; margin-bottom: 2px;">${flagMarkup}<span style="font-weight: 600; font-size: 12px; color: #eee;">${city}</span></div><div style="display: flex; flex-direction: column; align-items: center; gap: 0px; font-size: 11px; color: #ccc; border-top: 1px solid rgba(255,255,255,0.15); padding-top: 3px; width: 100%;"><span>Servers: <b style="color:#fff;">${serverCount.toLocaleString()}</b></span>${dcCount > 0 ? `<span>Datacenters: <b style="color:#fff;">${dcCount.toLocaleString()}</b></span>` : ''}</div>`;
     tooltip.style.left = `${x}px`;
     tooltip.style.top = `${y}px`;
     tooltip.style.display = 'flex';
@@ -807,7 +809,7 @@ async function onRegionSelected(event) {
     const code = event.detail?.regionCode;
     if (!code) return;
 
-    showReviewPopup('region_filters');
+    showRegionDonationPopup('region_filters');
     closeGlobalPanels();
     delete State.regionServersCache[code];
 

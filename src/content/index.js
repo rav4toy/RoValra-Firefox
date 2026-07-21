@@ -1,8 +1,7 @@
-import { injectFirefoxPageScripts, installImageCspFix } from './core/firefox/compat.js';
-injectFirefoxPageScripts();
 import { initializeObserver, startObserving } from './core/observer.js';
 import { detectTheme, dispatchThemeEvent } from './core/theme.js';
 import { getValidAccessToken } from './core/oauth/oauth.js';
+import { startAuthFavoriteCleanupMonitor } from './core/oauth/fallback.js';
 import { t } from './core/locale/i18n.js';
 // Site wide
 import { init as initOnboarding } from './features/onboarding/onboarding.js';
@@ -17,11 +16,14 @@ import { init as initMarkDownTest } from './features/developer/markdowntest.js';
 import { init as initTests } from './features/developer/tests.js';
 import { init as initApiDocs } from './features/developer/apiDocs.js';
 import { init as initModeration } from './features/moderation/moderation.js';
-import { init as initApiKey } from './core/utils/trackers/apiKey.js';
 import { init as initBirthdayTracker } from './core/utils/trackers/birthday.js';
 import { init as initServerTracker } from './core/utils/trackers/servers.js';
 import { initFriendsListTracking } from './core/utils/trackers/friendslist.js';
 import { initTransactionsTracking } from './core/utils/trackers/transactions.js';
+import { initBadgesTracking } from './core/utils/trackers/badges.js';
+import { initAvatarInventoryTracking } from './core/utils/trackers/avatarInventory.js';
+import { initUserCurrencyTracking } from './core/utils/trackers/currency.js';
+import { init as initClientChannelTracker } from './core/utils/trackers/channels.js';
 import { init as initPrivateGames } from './features/games/privateGames.js';
 import { init as initGamePassViewer } from './features/games/gamePassViewer.js';
 import { init as initQoLToggles } from './features/navigation/QoLToggles.js';
@@ -32,11 +34,19 @@ import { init as initGroupFunds } from './features/navigation/groupfunds.js';
 import { init as initUrlTracker } from './core/utils/trackers/urlTracker.js';
 import { init as initCustomFont } from './features/sitewide/customFont.js';
 import { init as initTransactionsLink } from './features/navigation/transactionslink.js';
+import { init as initDocsLink } from './features/navigation/docslink.js';
 import { initializeModernIcons as initModernIcons } from './features/sitewide/modernIcons.js';
 import { init as initLoginBanner } from './features/scamprevention/loginBanner.js';
 import { init as initLessPlus } from './features/sitewide/lessPlus.js';
 import { init as initKidsTheme } from './features/sitewide/kidsTheme.js';
+import { init as initKidsThemeText } from './features/sitewide/kidsThemeText.js';
 import { init as initSidebarCollapse } from './features/sitewide/sidebarCollapse.js';
+import { init as initSidebarLayout } from './features/sitewide/sidebarLayout.js';
+import { init as initRemoveDownloadButton } from './features/sitewide/removeDownloadButton.js';
+import { init as initFriendGameLink } from './features/sitewide/friendGameLink.js';
+import { init as initPaymentMethodBonusItems } from './features/paymentmethods/bonusItems.js';
+import { init as initThemeSwitcher } from './features/sitewide/themeSwitcher.js';
+import { initNotificationCenter as initReceiveRobuxNotificationCenter } from './features/plus/sendRobux.js';
 
 // Avatar
 import { init as initAvatarFilters } from './features/avatar/filters.js';
@@ -53,11 +63,15 @@ import { init as initCatalogBannerTest } from './features/catalog/bannerTest.js'
 import { init as initParentItem } from './features/catalog/ParentItem.js';
 import { init as initPurchasePrompt } from './features/catalog/purchasePrompt.js';
 import { init as initItemTrading } from './features/catalog/ItemTrading.js';
+import { init as initLastEquipped } from './features/catalog/lastEquipped.js';
 import { init as initItemRender } from './features/catalog/ItemRender.js';
 
 // Games
 import { init as initBotDetector } from './features/games/about/botDetector.js';
 import { init as initQuickPlay } from './features/games/quickplay.js';
+import { init as initHiddenBadges } from './features/games/hiddenBadges.js';
+import { init as initBadgeLayoutToggle } from './features/games/badgeLayoutToggle.js';
+import { init as initBadgeOwnership } from './features/games/badgeOwnership.js';
 import { init as initServerList } from './features/games/serverlist/serverlist.js';
 import { initRecentServers } from './features/games/serverlist/recentservers.js';
 import { init as initRegionPlayButton } from './features/games/RegionPlayButton.js';
@@ -68,9 +82,12 @@ import { init as initGameBanner } from './core/ui/games/banner.js';
 import { init as bannertest } from './features/games/banner.js';
 import { init as quickOutfits } from './features/games/actions/quickOutfits.js';
 import { init as initDevProductLoader } from './features/games/tab/DevProducts.js';
+import { init as initDeveloperProductsSection } from './features/games/DeveloperProductsSection.js';
+import { init as initDeveloperProductAutoBuy } from './features/games/developerProductAutoBuy.js';
 import { init as initHeatmap } from './features/games/tab/updateHistory.js';
 import { init as initTotalSpentGames } from './features/games/tab/totalSpentGames.js';
 import { init as initEvents } from './features/games/about/events.js';
+import { init as initUnderReviewPill } from './features/games/underReviewPill.js';
 // transactions
 import { init as initTotalSpent } from './features/transactions/totalspent.js';
 import { init as initPendingRobuxTrans } from './features/transactions/pendingRobuxTrans.js';
@@ -87,8 +104,12 @@ import { init as initHiddenGroupGames } from './features/groups/hiddenGroupGames
 import { init as initAntiBots } from './features/groups/Antibots.js';
 import { init as initPendingRobux } from './features/groups/pendingRobux.js';
 import { init as initDraggableGroups } from './features/groups/draggableGroups.js';
+import { init as initBulkLeaveGroups } from './features/groups/bulkLeave.js';
 import { init as initPlaceVisits } from './features/groups/placevisits.js';
 import { init as initGroupCreateDate } from './features/groups/createDate.js';
+// Plus
+import { init as initRobloxPlusStats } from './features/plus/stats.js';
+import { init as initRobloxPlusTransferLimits } from './features/plus/transferLimits.js';
 // Profile
 import { init as initDonationLink } from './features/profile/header/donationlink.js';
 import { init as initRap } from './features/profile/header/rap.js';
@@ -108,6 +129,11 @@ import { init as initProfileRender } from './features/profile/header/ProfileRend
 import { init as initStatus } from './features/profile/header/status.js';
 import { init as initLastPlayed } from './features/profile/header/lastplayed.js';
 import { init as initProfileViews } from './features/profile/header/profileViews.js';
+import { init as initProfilePronouns } from './features/profile/header/pronouns.js';
+import { init as initProfileNotes } from './features/profile/header/profileNotes.js';
+import { init as initCurrentlyPlayingLink } from './features/profile/header/currentlyPlayingLink.js';
+import { init as initCurrentlyPlayingSubplace } from './features/profile/header/currentlyPlayingSubplace.js';
+import { init as initIdVerificationBadge } from './features/profile/header/idVerificationBadge.js';
 import { init as initFriendsSince } from './features/profile/friends/friendsSince.js';
 import { init as initUnfriend } from './features/profile/friends/unfriend.js';
 import { init as initProfileBackground } from './features/profile/header/profileBackground.js';
@@ -117,6 +143,11 @@ import { init as initRobuxIcons } from './core/ui/robuxIcon.js';
 import { init as initPurchasePromptItemId } from './core/catalog/purchasePromptItemId.js';
 import { init as initCurrencyTransfer } from './features/profile/currencytransfer.js';
 import { init as initGroupFilters } from './features/profile/groupFilters.js';
+import { init as initUsernameColor } from './features/profile/header/usernameColor.js';
+import { init as initDisplayNameGradient } from './features/profile/header/displayNameGradient.js';
+import { init as initChatEligibilityTooltip } from './features/profile/header/chatEligibilityTooltip.js';
+import { init as initProfileCustomization } from './features/profile/profileCustomization.js';
+import { initProfileButton as initSendRobuxProfileButton } from './features/plus/sendRobux.js';
 
 // Settings
 import { init as initSettingsPage } from './features/settings/index.js';
@@ -124,17 +155,27 @@ import { init as initFirstAccount } from './features/settings/roblox/firstAccoun
 import { init as initLegacyThemeSwitcher } from './features/settings/roblox/legacyThemeSwitcher.js';
 // Home
 import { init as initAccurateContinue } from './features/home/accurateContinue.js';
+import { init as initHomeLayout } from './features/home/homeLayout.js';
+import { init as initCustomThemeEditor } from './features/home/customThemeEditor.js';
+import { init as initUnderratedGamesHome } from './features/home/underratedGames.js';
+import { init as initThemeCatalogPage } from './features/themes/themeCatalogPage.js';
 // create
 import { init as initCreateDownload } from './features/create.roblox.com/download.js';
+import { init as initCatalogExplorer } from './features/catalog/explorer.js';
 import { enforceSettingOverrides } from './core/settings/handlesettings.js';
+import { refreshRemoteSettingLocks } from './core/settings/remoteSettingLocks.js';
+// buy page
+import { initBuyRobuxPage as initSendRobuxBuyPage } from './features/plus/sendRobux.js';
 
 let pageLoaded = false;
 let lastPath = window.location.pathname.toLowerCase();
+const initializedPersistentFeatures = new Set();
 
 const featureRoutes = [
     // Generic features that run on most pages
     {
         paths: ['*'],
+        once: true,
         features: [
             initSettingsPage,
             initQuickPlay,
@@ -147,11 +188,14 @@ const featureRoutes = [
             initStreamerMode,
             initMarkDownTest,
             initTests,
-            initApiKey,
             initBirthdayTracker,
             initServerTracker,
             initFriendsListTracking,
             initTransactionsTracking,
+            initBadgesTracking,
+            initAvatarInventoryTracking,
+            initUserCurrencyTracking,
+            initClientChannelTracker,
             initQoLToggles,
             initCopyId,
             initBetaPrograms,
@@ -162,23 +206,38 @@ const featureRoutes = [
             initBannedUsers,
             initGroupFunds,
             initTransactionsLink,
+            initDocsLink,
             initStatus,
             initCustomFont,
             initRobuxIcons,
             initProfileBackground,
             initAvatarBorder,
+            initDisplayNameGradient,
             initPurchasePromptItemId,
+            initCurrentlyPlayingSubplace,
             initUrlTracker,
             initModernIcons,
             initLessPlus,
             initKidsTheme,
+            initKidsThemeText,
             initSidebarCollapse,
+            initSidebarLayout,
+            initRemoveDownloadButton,
+            initFriendGameLink,
+            initThemeSwitcher,
+            initCustomThemeEditor,
+            initThemeCatalogPage,
+            initReceiveRobuxNotificationCenter,
         ],
     },
     // pretty much just the 40% method
     {
         paths: ['/catalog', '/bundles', '/game-pass', '/games'],
         features: [init40Method, initPurchasePrompt, initDonationLink],
+    },
+    {
+        paths: ['/developer-product/'],
+        features: [initPurchasePrompt, initDeveloperProductAutoBuy],
     },
     // Game pass viewer for 404 pages
     {
@@ -195,8 +254,15 @@ const featureRoutes = [
             initCatalogBannerTest,
             initParentItem,
             initItemTrading,
+            initLastEquipped,
             initItemRender,
+            initCatalogExplorer,
         ],
+    },
+    // Avatar pages
+    {
+        paths: ['/looks'],
+        features: [initItemRender],
     },
     // Group pages
     {
@@ -211,10 +277,16 @@ const featureRoutes = [
             initItemRender,
         ],
     },
+    // Communities list page (My Communities) — matches /communities and /communities/...
+    {
+        paths: ['/communities'],
+        features: [initBulkLeaveGroups],
+    },
     // Game pages
     {
         paths: ['/games/'],
         features: [
+            initDeveloperProductsSection,
             initGameBanner,
             initServerIdExtraction,
             initBotDetector,
@@ -227,6 +299,8 @@ const featureRoutes = [
             initPrivateServerControls,
             initHeatmap,
             initPlusPrivateServerTooltip,
+            initCatalogExplorer,
+            initUnderReviewPill,
         ],
     },
     // private games and game pages
@@ -237,11 +311,14 @@ const featureRoutes = [
             initSubplaces,
             initTotalSpentGames,
             initEvents,
+            initHiddenBadges,
+            initBadgeLayoutToggle,
+            initBadgeOwnership,
         ],
     },
-    // Private games page
+    // Private games page and unavailable game redirects
     {
-        paths: ['/private-games/'],
+        paths: ['/games/', '/private-games/'],
         features: [initPrivateGames],
     },
     // avatar
@@ -253,6 +330,11 @@ const featureRoutes = [
             initAvatarRotator,
             initMultiEquip,
         ],
+    },
+    // Roblox Plus Page
+    {
+        paths: ['/plus'],
+        features: [initRobloxPlusStats, initRobloxPlusTransferLimits],
     },
     // User profile pages
     {
@@ -266,25 +348,37 @@ const featureRoutes = [
             initUserGames,
             initTrustedFriends,
             initProfileRender,
+            initIdVerificationBadge,
             initFriendsSince,
             initUnfriend,
             initLastPlayed,
+            initProfilePronouns,
+            initProfileNotes,
             initProfileViews,
+            initCurrentlyPlayingLink,
+            initCurrentlyPlayingSubplace,
             initGroupRole,
             initCurrencyTransfer,
             initGroupFilters,
             initAvatarDownload,
+            initChatEligibilityTooltip,
+            initProfileCustomization,
+            initSendRobuxProfileButton,
         ],
     },
     {
         paths: ['/users/', '/banned-users/'],
-        features: [initCategorizeWearing, initRovalraBadges],
+        features: [initCategorizeWearing, initRovalraBadges, initUsernameColor],
     },
 
     // Transactions page
     {
         paths: ['/transactions'],
         features: [initTotalSpent, initPendingRobuxTrans, initTotalEarned],
+    },
+    {
+        paths: ['/upgrades/paymentmethods'],
+        features: [initPaymentMethodBonusItems],
     },
     // Trading
     {
@@ -316,7 +410,11 @@ const featureRoutes = [
     },
     {
         paths: ['/home'],
-        features: [initAccurateContinue],
+        features: [
+            initHomeLayout,
+            initUnderratedGamesHome,
+            initAccurateContinue,
+        ],
     },
     {
         paths: ['/my/account'],
@@ -327,13 +425,78 @@ const featureRoutes = [
         paths: ['/NewLogin', '/Login'],
         features: [initLoginBanner],
     },
+    // Buy Robux Page
+    {
+        paths: ['/upgrades/robux'],
+        features: [initSendRobuxBuyPage],
+    },
 ];
 
 const startTime = performance.now();
+let lastGamePageHashbangHash = null;
+
+function isGamePagePath(pathname = window.location.pathname) {
+    return /^(?:\/[a-z]{2}(?:-[a-z]{2})?)?\/games\//i.test(pathname);
+}
+
+function getHashbangStrippedVariants(hash) {
+    if (!hash.startsWith('#!')) return [];
+
+    const fragment = hash.slice(2);
+    const strippedFragment = fragment.startsWith('/')
+        ? fragment.slice(1)
+        : fragment;
+
+    return [`#${strippedFragment}`, `#/${strippedFragment}`];
+}
+
+function normalizeGamePageHash() {
+    if (!isGamePagePath()) {
+        lastGamePageHashbangHash = null;
+        return false;
+    }
+
+    const currentHash = window.location.hash;
+
+    if (!currentHash) {
+        lastGamePageHashbangHash = null;
+        return false;
+    }
+
+    if (currentHash.startsWith('#!')) {
+        lastGamePageHashbangHash = currentHash;
+        return false;
+    }
+
+    if (!lastGamePageHashbangHash) return false;
+
+    const strippedVariants = getHashbangStrippedVariants(
+        lastGamePageHashbangHash,
+    );
+    if (!strippedVariants.includes(currentHash)) {
+        lastGamePageHashbangHash = null;
+        return false;
+    }
+
+    const oldUrl = window.location.href;
+    window.history.replaceState(
+        history.state,
+        '',
+        `${window.location.pathname}${window.location.search}${lastGamePageHashbangHash}`,
+    );
+    window.dispatchEvent(
+        new HashChangeEvent('hashchange', {
+            oldURL: oldUrl,
+            newURL: window.location.href,
+        }),
+    );
+    return true;
+}
 
 function runFeaturesForPage() {
     const path = window.location.pathname.toLowerCase();
     const normalizedPath = path.replace(/^\/[a-z]{2}(?:-[a-z]{2})?\//, '/');
+    const featuresRunThisPass = new Set();
 
     featureRoutes.forEach((route) => {
         if (
@@ -348,6 +511,14 @@ function runFeaturesForPage() {
         ) {
             if (route.features && Array.isArray(route.features)) {
                 route.features.forEach((init) => {
+                    if (featuresRunThisPass.has(init)) return;
+                    if (route.once && initializedPersistentFeatures.has(init)) {
+                        return;
+                    }
+
+                    featuresRunThisPass.add(init);
+                    if (route.once) initializedPersistentFeatures.add(init);
+
                     try {
                         init();
                     } catch (error) {
@@ -369,17 +540,42 @@ async function initializePage() {
     getValidAccessToken(false, false).catch((error) =>
         console.error('RoValra: OAuth token initialization failed', error),
     );
-    initApiKey().catch((error) =>
-        console.error('RoValra: API key initialization failed', error),
-    );
+    startAuthFavoriteCleanupMonitor();
+
+    const runSettingsMaintenance = () => {
+        refreshRemoteSettingLocks()
+            .catch((error) =>
+                console.error(
+                    'RoValra: Failed to refresh remote settings config.',
+                    error,
+                ),
+            )
+            .finally(() =>
+                enforceSettingOverrides().catch((error) =>
+                    console.error(
+                        'RoValra: Failed to enforce setting overrides.',
+                        error,
+                    ),
+                ),
+            );
+    };
+
+    const scheduleSettingsMaintenance = () => {
+        if (typeof requestIdleCallback === 'function') {
+            requestIdleCallback(runSettingsMaintenance, { timeout: 5000 });
+            return;
+        }
+
+        setTimeout(runSettingsMaintenance, 0);
+    };
 
     const startFeatures = async () => {
         const featureStartTime = performance.now();
 
         await t('__i18n_ready__').catch(() => {});
-        await enforceSettingOverrides();
         detectTheme().then((theme) => dispatchThemeEvent(theme));
         runFeaturesForPage();
+        scheduleSettingsMaintenance();
 
         const endTime = performance.now();
 
@@ -434,24 +630,27 @@ function setupUrlChangeListeners() {
 
     history.pushState = function (...args) {
         originalPushState.apply(this, args);
+        normalizeGamePageHash();
         handleUrlChange();
     };
 
     history.replaceState = function (...args) {
         originalReplaceState.apply(this, args);
+        normalizeGamePageHash();
         handleUrlChange();
     };
 
     window.addEventListener('popstate', handleUrlChange);
+    window.addEventListener('hashchange', normalizeGamePageHash);
 
-    let urlCheckInterval = setInterval(() => {
+    setInterval(() => {
         if (window.location.pathname.toLowerCase() !== lastPath) {
             handleUrlChange();
         }
     }, 500);
+
+    normalizeGamePageHash();
 }
 
 initializePage();
 setupUrlChangeListeners();
-
-try { installImageCspFix(); } catch (e) {}

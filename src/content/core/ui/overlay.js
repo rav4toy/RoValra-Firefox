@@ -95,12 +95,13 @@ export function createOverlay({
     }
 
     overlay.appendChild(content);
-    (document.body || document.documentElement).appendChild(overlay);
-    document.body.style.overflow = 'hidden';
+    const overlayHost = document.body || document.documentElement;
+    overlayHost.appendChild(overlay);
+    if (document.body) document.body.style.overflow = 'hidden';
 
     const close = () => {
         overlay.remove();
-        document.body.style.overflow = '';
+        if (document.body) document.body.style.overflow = '';
         if (typeof onClose === 'function') {
             onClose();
         }

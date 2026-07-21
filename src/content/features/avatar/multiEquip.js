@@ -1,8 +1,9 @@
 import { getIdsByCategory, getIdsBySubcategory } from '../../core/utils/itemCategories.js';
+import { dispatchPageEvent } from '../../core/firefox/pageBridge.js';
 
 export function init() {
     const updateState = async (enabled) => {
-        document.dispatchEvent(new CustomEvent('rovalra-multi-equip', { detail: { enabled } }));
+        dispatchPageEvent(document, 'rovalra-multi-equip', { enabled });
 
         if (enabled) {
             try {
@@ -15,13 +16,11 @@ export function init() {
                 const accIds = new Set(accData?.assetTypeIds || []);
                 if (hairData?.assetTypeIds) hairData.assetTypeIds.forEach(id => accIds.add(id));
 
-                document.dispatchEvent(new CustomEvent('rovalra-multi-equip', {
-                    detail: {
-                        enabled,
-                        accessories: Array.from(accIds),
-                        layered: clothingData?.assetTypeIds || []
-                    }
-                }));
+                dispatchPageEvent(document, 'rovalra-multi-equip', {
+                    enabled,
+                    accessories: Array.from(accIds),
+                    layered: clothingData?.assetTypeIds || [],
+                });
             } catch (e) {
                 console.warn("RoValra: Failed to fetch dynamic categories for multi-equip", e);
             }

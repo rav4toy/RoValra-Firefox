@@ -9,6 +9,7 @@ import { loadSettings } from '../../core/settings/handlesettings.js';
 import { getUserSettings } from '../../core/donators/settingHandler.js';
 import { getBorders } from '../../core/configs/borders.js';
 import {
+    getUserCardContext,
     onUserCardElement,
     observeUserCardElements,
 } from '../../core/profile/userCardElements.js';
@@ -18,6 +19,8 @@ const BORDER_CHILD_SELECTOR =
 const OVERLAY_CHILD_SELECTOR =
     '.rovalra-status-bubble-wrapper, .avatar-status, .avatar-card-label, .icon-label';
 const BORDER_SCALE = 1.24;
+const BORDER_Z_INDEX = '2';
+const OVERLAY_Z_INDEX = '4';
 const MAX_ALPHA_CENTER_CORRECTION = 0.04;
 const borderContentBoundsCache = new Map();
 
@@ -78,6 +81,48 @@ function syncBorderMetrics(container) {
         ':scope > .rovalra-avatar-border',
     )) {
         syncBorderImageMetrics(containerBox, clipBox, border);
+    }
+}
+
+function ensureStackingLayer(element, zIndex) {
+    const computedStyle = window.getComputedStyle(element);
+    if (computedStyle.position === 'static') {
+        element.style.position = 'relative';
+    }
+
+    element.style.zIndex = zIndex;
+}
+
+function getRelatedOverlayElements(container) {
+    const overlays = new Set();
+    const addOverlays = (root) => {
+        if (!root) return;
+        if (root.matches?.(OVERLAY_CHILD_SELECTOR)) overlays.add(root);
+        for (const overlay of root.querySelectorAll?.(OVERLAY_CHILD_SELECTOR) ||
+            []) {
+            overlays.add(overlay);
+        }
+    };
+
+    addOverlays(container);
+    addOverlays(container.closest('.avatar'));
+    addOverlays(
+        container.closest('.user-profile-header-details-avatar-container'),
+    );
+    addOverlays(container.parentElement);
+
+    return overlays;
+}
+
+function syncOverlayStacking(container) {
+    for (const border of container.querySelectorAll(
+        ':scope > .rovalra-avatar-border',
+    )) {
+        border.style.zIndex = BORDER_Z_INDEX;
+    }
+
+    for (const overlay of getRelatedOverlayElements(container)) {
+        ensureStackingLayer(overlay, OVERLAY_Z_INDEX);
     }
 }
 
@@ -215,13 +260,40 @@ function ensureBorderContainerLayout(container) {
     container.style.overflow = 'visible';
 }
 
+function removeBorderFromContainer(container) {
+    if (!container) return;
+
+    delete container.dataset.rovalraBorderLoading;
+    delete container.dataset.rovalraIntendedBorder;
+
+    for (const border of container.querySelectorAll(
+        ':scope > .rovalra-avatar-border',
+    )) {
+        border.remove();
+    }
+
+    const clip = container.querySelector(
+        ':scope > .rovalra-avatar-border-clip',
+    );
+    if (!clip) return;
+
+    while (clip.firstChild) {
+        container.insertBefore(clip.firstChild, clip);
+    }
+    clip.remove();
+}
+
 function ensureBorderStructure(container) {
     ensureBorderContainerLayout(container);
     const clip = syncBorderClipChildren(container);
+    syncOverlayStacking(container);
 
     if (!container.dataset.rovalraBorderClipObserver) {
         container.dataset.rovalraBorderClipObserver = 'true';
-        observeChildren(container, () => syncBorderClipChildren(container));
+        observeChildren(container, () => {
+            syncBorderClipChildren(container);
+            syncOverlayStacking(container);
+        });
         observeResize(container, () => syncBorderMetrics(container));
         observeResize(clip, () => syncBorderMetrics(container));
     }
@@ -263,12 +335,17 @@ export async function applyBorderToContainer(
         if (isConfigured) break;
     }
 
-    if (container.querySelector('.rovalra-avatar-border')) {
+    const existingBorders = [
+        ...container.querySelectorAll(':scope > .rovalra-avatar-border'),
+    ];
+    if (
+        existingBorders.length > 0 &&
+        container.dataset.rovalraIntendedBorder !== borderUrl
+    ) {
+        removeBorderFromContainer(container);
+    } else if (existingBorders.length > 0) {
         if (alwaysPlay && animatedLink && animatedLink !== staticLink) {
-            const borders = [
-                ...container.querySelectorAll(':scope > .rovalra-avatar-border'),
-            ];
-            const [border, ...extraBorders] = borders;
+            const [border, ...extraBorders] = existingBorders;
 
             if (border) {
                 border.src = animatedLink;
@@ -284,7 +361,12 @@ export async function applyBorderToContainer(
         return;
     }
 
-    if (container.dataset.rovalraBorderLoading) return;
+    if (
+        container.dataset.rovalraBorderLoading &&
+        container.dataset.rovalraIntendedBorder === borderUrl
+    ) {
+        return;
+    }
     container.dataset.rovalraBorderLoading = 'true';
     container.dataset.rovalraIntendedBorder = borderUrl;
 
@@ -311,20 +393,17 @@ export async function applyBorderToContainer(
                 overlays.push(child);
             }
         }
-        const status =
-            container.querySelector('.avatar-status') ||
-            container.closest('.avatar')?.querySelector('.avatar-status') ||
-            container.parentElement?.querySelector('.avatar-status');
-
         ensureBorderStructure(container);
 
         for (const overlay of overlays) {
             container.appendChild(overlay);
         }
+        syncOverlayStacking(container);
 
         if (alwaysPlay || !animatedLink || animatedLink === staticLink) {
             container.appendChild(img);
             syncBorderMetrics(container);
+            syncOverlayStacking(container);
         } else {
             const animImg = document.createElement('img');
             animImg.className = 'rovalra-avatar-border';
@@ -341,20 +420,21 @@ export async function applyBorderToContainer(
             container.appendChild(img);
             container.appendChild(animImg);
             syncBorderMetrics(container);
+            syncOverlayStacking(container);
 
             container.addEventListener('mouseenter', () => {
                 img.style.display = 'none';
                 animImg.style.display = 'block';
                 startAnimatedBorder(animImg, animatedLink);
+                syncOverlayStacking(container);
             });
             container.addEventListener('mouseleave', () => {
                 img.style.display = 'block';
                 animImg.style.display = 'none';
                 stopAnimatedBorder(animImg);
+                syncOverlayStacking(container);
             });
         }
-
-        if (status) status.style.zIndex = '3';
     };
 
     img.onerror = () => {
@@ -389,15 +469,20 @@ async function resolveBorderUrl(userId) {
 }
 
 function handleTile(tile, card) {
-    if (tile.dataset.rovalraBorderApplied) return;
-    tile.dataset.rovalraBorderApplied = 'true';
-
     const userId = card?.userId;
     const avatarEl = card?.avatar;
     if (!userId || !avatarEl) return;
+    if (tile.dataset.rovalraBorderApplied === 'true') return;
+    if (tile.dataset.rovalraBorderApplied === String(userId)) return;
+
+    tile.dataset.rovalraBorderApplied = String(userId);
+    removeBorderFromContainer(avatarEl);
 
     resolveBorderUrl(userId)
         .then((borderUrl) => {
+            const currentUserId = getUserCardContext(tile).userId;
+            if (String(currentUserId) !== String(userId)) return;
+
             if (!borderUrl) return;
             const alwaysPlay = tile.matches(
                 'a.user-avatar-container.avatar.avatar-headshot',

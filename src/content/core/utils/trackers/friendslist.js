@@ -1,5 +1,5 @@
-// This script fetches a users friends list and stores information about it,
-// like last online, mutual friends, estimated age range (idk if that will be used), trusted friends, last location, friends since and some other lesser important stuff.
+// This script fetches a user's friends list and stores information about it,
+// like last online, mutual friends, chat eligibility, trusted friends, last location, and friends since.
 import { callRobloxApiJson } from '../../api';
 import { getAuthenticatedUserId } from '../../user';
 import { ts } from '../../locale/i18n.js';
@@ -11,6 +11,7 @@ import {
 } from '../../apis/users.js';
 
 const FRIENDS_DATA_KEY = 'rovalra_friends_data';
+const FRIENDS_DATA_VERSION = 5;
 const FRIENDS_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes for heavy data
 const ONLINE_STATUS_CACHE_DURATION = 1 * 60 * 1000; // 1 minute for online status
 
@@ -43,94 +44,6 @@ export function getFriendRequestOriginText(originId) {
     }
 }
 
-function convertVerifiedAgeLabel(label) {
-    switch (label) {
-        case 'Label.AgeGroupUnder9':
-            return '<9';
-        case 'Label.AgeGroup9To12':
-            return '9-12';
-        case 'Label.AgeGroup13To15':
-            return '13-15';
-        case 'Label.AgeGroup16To17':
-            return '16-17';
-        case 'Label.AgeGroup18To20':
-            return '18-20';
-        case 'Label.AgeGroupOver21':
-            return '21+';
-        default:
-            return null;
-    }
-}
-
-function refineAgeWithAccountAge(estimatedRange, accountCreatedTimestamp) {
-    if (
-        !accountCreatedTimestamp ||
-        !estimatedRange ||
-        estimatedRange === 'No Chat Data' ||
-        estimatedRange === '(age check)' ||
-        estimatedRange === 'Unknown (No Chat History)'
-    ) {
-        return estimatedRange;
-    }
-
-    const accountAgeYears = Math.floor(
-        (Date.now() - accountCreatedTimestamp) / (1000 * 60 * 60 * 24 * 365.25),
-    );
-
-    if (estimatedRange.includes(' or ')) {
-        const parts = estimatedRange.split(' or ');
-        const upperPart = parts.find((p) => p.endsWith('+'))?.replace('+', '');
-        const lowerPart = parts
-            .find((p) => p.startsWith('<'))
-            ?.replace('<', '');
-
-        const minOfUpper = upperPart ? parseInt(upperPart) : 0;
-        const maxOfLower = lowerPart ? parseInt(lowerPart) - 1 : 0;
-
-        if (accountAgeYears > maxOfLower) {
-            return `${Math.max(minOfUpper, accountAgeYears)}+`;
-        }
-        return `${upperPart}+ or ${accountAgeYears}-${maxOfLower}`;
-    }
-
-    if (estimatedRange.startsWith('<')) {
-        const maxAge = parseInt(estimatedRange.replace('<', '')) - 1;
-        return accountAgeYears >= maxAge
-            ? `${accountAgeYears}+`
-            : `${accountAgeYears}-${maxAge}`;
-    }
-
-    if (estimatedRange.endsWith('+')) {
-        const minAge = parseInt(estimatedRange.replace('+', ''));
-        return `${Math.max(minAge, accountAgeYears)}+`;
-    }
-
-    if (estimatedRange.includes('-')) {
-        const [minStr, maxStr] = estimatedRange.split('-');
-        const minAge = parseInt(minStr);
-        const maxAge = parseInt(maxStr);
-        const newMin = Math.max(minAge, accountAgeYears);
-
-        if (newMin >= maxAge) return `${newMin}+`;
-        return `${newMin}-${maxAge}`;
-    }
-
-    return estimatedRange;
-}
-
-async function fetchUserAgeGroup() {
-    try {
-        return await callRobloxApiJson({
-            subdomain: 'apis',
-            endpoint: '/user-settings-api/v1/account-insights/age-group',
-            useBackground: true,
-        });
-    } catch (error) {
-        console.error('RoValra: Failed to fetch self age group', error);
-        return null;
-    }
-}
-
 async function fetchChatConversationsPage(cursor = null) {
     try {
         let endpoint =
@@ -158,65 +71,7 @@ async function fetchAllConversations() {
     return allConversations;
 }
 
-function getCompatibleAgeRange(ownAgeKey) {
-    switch (ownAgeKey) {
-        case 'Label.AgeGroupUnder9':
-            return '<13';
-        case 'Label.AgeGroup9To12':
-            return '<16';
-        case 'Label.AgeGroup13To15':
-            return '9-17';
-        case 'Label.AgeGroup16To17':
-            return '13-20';
-        case 'Label.AgeGroup18To20':
-            return '16+';
-        case 'Label.AgeGroupOver21':
-            return '18+';
-        default:
-            return null;
-    }
-}
-
-function estimateAgeRange(
-    ownAgeKey,
-    hasRestrictedMsg,
-    hasTrustedComms,
-    hasVisibleMessages,
-    needsAgeCheck,
-) {
-    if (hasRestrictedMsg) {
-        switch (ownAgeKey) {
-            case 'Label.AgeGroup16To17':
-                return '21+ or <13';
-            case 'Label.AgeGroup13To15':
-                return '18+ or <9';
-            case 'Label.AgeGroup18To20':
-                return '<16';
-            case 'Label.AgeGroupOver21':
-                return '<18';
-            default:
-                return 'Restricted';
-        }
-    }
-
-    const compatibleRange = getCompatibleAgeRange(ownAgeKey);
-
-    if (hasVisibleMessages) {
-        return compatibleRange || 'Compatible';
-    }
-
-    if (hasTrustedComms) {
-        return compatibleRange || 'Trusted';
-    }
-
-    if (needsAgeCheck) {
-        return '(age check)';
-    }
-
-    return compatibleRange || 'Unknown (No Chat History)';
-}
-
-async function fetchFriendsPage(userId, cursor = null) {
+export async function fetchFriendsPage(userId, cursor = null) {
     try {
         let endpoint = `/v1/users/${userId}/friends/find?limit=50`;
         if (cursor) endpoint += `&cursor=${encodeURIComponent(cursor)}`;
@@ -230,7 +85,23 @@ async function fetchFriendsPage(userId, cursor = null) {
     }
 }
 
-async function fetchAllTrustedFriends(userId) {
+export async function fetchFriendsCustom(userId, params = new URLSearchParams(), cursor = null) {
+    try {
+
+        let endpoint = `/v1/users/${userId}/friends/find`;
+        if (cursor) params.append('cursor', value);
+        if (params.size > 0) endpoint += `?${params.toString()}`;
+        return await callRobloxApiJson({
+            subdomain: 'friends',
+            endpoint: endpoint,
+            useBackground: true,
+        });
+    } catch (error) {
+        return null;
+    }
+}
+
+export async function fetchAllTrustedFriends(userId) {
     const trustedIds = new Set();
     let cursor = null;
     try {
@@ -252,7 +123,7 @@ async function fetchAllTrustedFriends(userId) {
     return trustedIds;
 }
 
-async function fetchFriendsOnlineStatus(userId) {
+export async function fetchFriendsOnlineStatus(userId) {
     try {
         const response = await callRobloxApiJson({
             subdomain: 'friends',
@@ -292,10 +163,9 @@ export async function updateFriendsList(userId) {
     );
 
     try {
-        const [conversations, ageData, onlineData, allTrustedFriendsSet] =
+        const [conversations, onlineData, allTrustedFriendsSet] =
             await Promise.all([
                 fetchAllConversations(),
-                fetchUserAgeGroup(),
                 fetchFriendsOnlineStatus(userId),
                 fetchAllTrustedFriends(userId),
             ]);
@@ -308,7 +178,6 @@ export async function updateFriendsList(userId) {
             });
         });
 
-        const ownAgeKey = ageData?.ageGroupTranslationKey;
         const chatAnalysisMap = new Map();
 
         if (conversations) {
@@ -318,40 +187,44 @@ export async function updateFriendsList(userId) {
                 );
                 if (!friendId) return;
 
-                const hasRestrictedMsg = conv.messages?.some(
-                    (m) =>
-                        m.content &&
-                        m.content.includes(
-                            "Other users can't see messages in this chat due to new chat rules",
-                        ),
-                );
-                const hasTrustedComms = conv.messages?.some(
-                    (m) => m.moderation_type === 'trusted_comms',
-                );
-                const hasVisibleMessages = conv.messages?.some(
-                    (m) =>
-                        m.type === 'user' &&
-                        m.content &&
-                        !m.content.includes("Other users can't see"),
-                );
-
-                const needsAgeCheck = conv.messages?.some(
-                    (m) =>
-                        m.content &&
-                        m.content.includes(
-                            'Your friend needs to complete an age check to see your messages',
-                        ),
-                );
+                const hasRestrictedMsg = conv.messages?.some((message) => {
+                    const content = message.content?.toLowerCase();
+                    return (
+                        content?.includes(
+                            "other users can't see messages in this chat",
+                        ) || content?.includes('due to new chat rules')
+                    );
+                });
+                const needsAgeCheck = conv.messages?.some((message) => {
+                    const content = message.content?.toLowerCase();
+                    return (
+                        content?.includes('needs to complete an age check') ||
+                        content?.includes(
+                            'one or more users need to complete an age check to see your messages',
+                        ) ||
+                        content?.includes('has not completed an age check')
+                    );
+                });
+                const existingStatus = chatAnalysisMap.get(friendId);
+                const canChat = !hasRestrictedMsg;
+                const hasAgeChecked = !needsAgeCheck;
 
                 chatAnalysisMap.set(friendId, {
-                    estimatedAge: estimateAgeRange(
-                        ownAgeKey,
-                        hasRestrictedMsg,
-                        hasTrustedComms,
-                        hasVisibleMessages,
-                        needsAgeCheck,
-                    ),
-                    needsAgeCheck: needsAgeCheck,
+                    canChat:
+                        existingStatus?.canChat === false || canChat === false
+                            ? false
+                            : existingStatus?.canChat === true ||
+                                canChat === true
+                                ? true
+                                : null,
+                    hasAgeChecked:
+                        existingStatus?.hasAgeChecked === false ||
+                            hasAgeChecked === false
+                            ? false
+                            : existingStatus?.hasAgeChecked === true ||
+                                hasAgeChecked === true
+                                ? true
+                                : null,
                 });
             });
         }
@@ -427,13 +300,12 @@ export async function updateFriendsList(userId) {
                         let mutualFriends = [];
                         let accountCreated = null;
                         let friendsSince = null;
-                        let verifiedAgeRange = null;
                         let friendRequestOrigin = null;
 
                         userInsights.forEach((item) => {
                             if (
                                 item.insightCase ===
-                                    INSIGHT_CASES.MUTUAL_FRIENDS &&
+                                INSIGHT_CASES.MUTUAL_FRIENDS &&
                                 item.mutualFriendInsight
                             ) {
                                 mutualFriends = Object.keys(
@@ -442,7 +314,7 @@ export async function updateFriendsList(userId) {
                             }
                             if (
                                 item.insightCase ===
-                                    INSIGHT_CASES.FRIENDSHIP_AGE &&
+                                INSIGHT_CASES.FRIENDSHIP_AGE &&
                                 item.friendshipAgeInsight
                             ) {
                                 friendsSince =
@@ -451,7 +323,7 @@ export async function updateFriendsList(userId) {
                             }
                             if (
                                 item.insightCase ===
-                                    INSIGHT_CASES.ACCOUNT_CREATION_DATE &&
+                                INSIGHT_CASES.ACCOUNT_CREATION_DATE &&
                                 item.accountCreationDateInsight
                             ) {
                                 accountCreated =
@@ -460,17 +332,7 @@ export async function updateFriendsList(userId) {
                             }
                             if (
                                 item.insightCase ===
-                                    INSIGHT_CASES.AGE_VERIFIED &&
-                                item.userAgeVerifiedInsight
-                            ) {
-                                verifiedAgeRange = convertVerifiedAgeLabel(
-                                    item.userAgeVerifiedInsight
-                                        .verifiedAgeBandLabel,
-                                );
-                            }
-                            if (
-                                item.insightCase ===
-                                    INSIGHT_CASES.FRIEND_REQUEST_ORIGIN &&
+                                INSIGHT_CASES.FRIEND_REQUEST_ORIGIN &&
                                 item.friendRequestOriginInsight
                             ) {
                                 friendRequestOrigin =
@@ -487,7 +349,7 @@ export async function updateFriendsList(userId) {
                         playedTogetherInsights.forEach((item) => {
                             if (
                                 item.insightCase ===
-                                    INSIGHT_CASES.PLAYED_TOGETHER &&
+                                INSIGHT_CASES.PLAYED_TOGETHER &&
                                 item.playedTogetherInsight
                             ) {
                                 const newUniverseId =
@@ -501,24 +363,13 @@ export async function updateFriendsList(userId) {
                                     mostFrequentUniverseId === null ||
                                     (newUniverseId !== null &&
                                         newUniverseId !==
-                                            mostFrequentUniverseId)
+                                        mostFrequentUniverseId)
                                 ) {
                                     mostFrequentUniverseId = newUniverseId;
                                     havePlayedTogether = newHavePlayedTogether;
                                 }
                             }
                         });
-
-                        const baseAgeRange = isTrusted
-                            ? 'Trusted Friend'
-                            : chatStatus?.estimatedAge ||
-                              getCompatibleAgeRange(ownAgeKey) ||
-                              'No Chat Data';
-
-                        const finalAgeRange = refineAgeWithAccountAge(
-                            baseAgeRange,
-                            accountCreated,
-                        );
 
                         let username = profile.names.username;
                         let displayName = profile.names.displayName;
@@ -543,9 +394,8 @@ export async function updateFriendsList(userId) {
                             isVerified: profile.isVerified,
                             isDeleted: profile.isDeleted,
                             isTrusted: isTrusted,
-                            estimatedAgeRange: finalAgeRange,
-                            needsAgeCheck: chatStatus?.needsAgeCheck || false,
-                            verifiedAgeRange: verifiedAgeRange,
+                            canChat: chatStatus?.canChat ?? null,
+                            hasAgeChecked: chatStatus?.hasAgeChecked ?? null,
                             mutualFriends: mutualFriends,
                             accountCreated: accountCreated,
                             friendsSince: friendsSince,
@@ -568,6 +418,7 @@ export async function updateFriendsList(userId) {
         }
 
         allUsersFriendsData[userId] = {
+            dataVersion: FRIENDS_DATA_VERSION,
             friendsList: fullFriendsList,
             lastChecked: Date.now(),
             lastOnlineChecked: Date.now(),
@@ -650,6 +501,7 @@ export async function getFriendsList() {
 
     const now = Date.now();
     const needsFullRefresh =
+        currentUserData.dataVersion !== FRIENDS_DATA_VERSION ||
         now - currentUserData.lastChecked > FRIENDS_CACHE_DURATION;
     const needsOnlineRefresh =
         now - (currentUserData.lastOnlineChecked || 0) >

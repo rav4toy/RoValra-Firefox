@@ -6,17 +6,161 @@ import { sanitizeString } from '../utils/sanitize.js';
 import { callRobloxApiJson } from '../api.js';
 import { getAuthenticatedUserId } from '../user.js';
 import { updateUserSettingViaApi } from '../donators/settingHandler.js';
+import { serializeGradientNameSetting } from '../donators/gradientName.js';
 import { createAndShowPopup } from '../../features/catalog/40method.js';
 import * as CacheHandler from '../storage/cacheHandler.js';
 import { hasOwn } from '../utils.js';
 import { showConfirmationPrompt } from '../ui/confirmationPrompt.js';
+import { showSystemAlert } from '../ui/roblox/alert.js';
+import { requestTouAgreement } from '../ui/tou/touAgreement.js';
+import {
+    normalizeProfilePronouns,
+    replacePronounSpecialCharacters,
+    truncateProfilePronouns,
+} from '../profile/pronouns.js';
+import {
+    REMOTE_SETTING_LOCKS_KEY,
+    REMOTE_SETTING_LOCK_REASON,
+    REMOTE_SETTING_OVERRIDE_KEY,
+    getRemoteSettingLocks,
+    refreshRemoteSettingLocks,
+} from './remoteSettingLocks.js';
+import { sanitizeCustomTheme } from '../themeCustom.js';
+import { dispatchPageEvent } from '../firefox/pageBridge.js';
 import './settingsCompat';
 
 let currentUserTier = 0;
 let gradientSyncTimeout = null;
+let gradientNameSyncTimeout = null;
 let donatorTierPromise = null;
 const colorLiveSaveTimeouts = new Map();
 const FEATURE_STATUS_PROMPT_ACK_KEY = 'featureStatusPromptAcknowledged';
+const CUSTOM_THEME_NAME_MAX_LENGTH = 20;
+const PROFILE_PRONOUNS_SETTING_NAME = 'profilePronouns';
+const PROFILE_PRONOUNS_API_KEY = 'pronouns';
+const PROFILE_PRONOUNS_AGREEMENT_KEY = 'rovalra_pronouns_guidelines_agreed';
+
+function applyCharacterReplacements(value, replacements) {
+    if (typeof value !== 'string' || !replacements) return value;
+
+    return Object.entries(replacements).reduce(
+        (result, [search, replacement]) =>
+            search ? result.split(search).join(String(replacement)) : result,
+        value,
+    );
+}
+
+function restoreProfilePronounsInput(value) {
+    const input = document.getElementById(PROFILE_PRONOUNS_SETTING_NAME);
+    if (!(input instanceof HTMLInputElement)) return;
+
+    input.value = value || '';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function consumeProfilePronounsInputAgreement() {
+    const input = document.getElementById(PROFILE_PRONOUNS_SETTING_NAME);
+    if (!(input instanceof HTMLInputElement)) return false;
+    if (input.dataset.rovalraAgreementConfirmedForEdit !== 'true') {
+        return false;
+    }
+
+    delete input.dataset.rovalraAgreementConfirmedForEdit;
+    return true;
+}
+
+async function prepareProfilePronounsUpdate(value) {
+    const normalizedValue = normalizeProfilePronouns(value);
+    const stored = await chrome.storage.local.get([
+        PROFILE_PRONOUNS_SETTING_NAME,
+        'rovalra_settings',
+    ]);
+    const previousValue = normalizeProfilePronouns(
+        stored[PROFILE_PRONOUNS_SETTING_NAME] ??
+            stored.rovalra_settings?.[PROFILE_PRONOUNS_SETTING_NAME],
+    );
+
+    const changed = normalizedValue !== previousValue;
+
+    if (changed && normalizedValue) {
+        const agreedForCurrentEdit = consumeProfilePronounsInputAgreement();
+        if (!agreedForCurrentEdit) {
+            const agreed = await requestTouAgreement({
+                agreementKey: PROFILE_PRONOUNS_AGREEMENT_KEY,
+            });
+            if (!agreed) {
+                restoreProfilePronounsInput(previousValue);
+                return { shouldSave: false };
+            }
+        }
+
+        try {
+            const validation = await callRobloxApiJson({
+                subdomain: 'contacts',
+                endpoint: `/v1/user/tag/validate?alias=${encodeURIComponent(normalizedValue)}`,
+                method: 'GET',
+                noCache: true,
+            });
+            const validationStatus = String(
+                validation?.status || '',
+            ).toLowerCase();
+            if (validationStatus !== 'success') {
+                restoreProfilePronounsInput(previousValue);
+                showSystemAlert(
+                    validationStatus === 'toolong'
+                        ? 'Pronouns must be 15 characters or fewer.'
+                        : "Roblox's filter rejected these pronouns. Try a different value.",
+                    'warning',
+                );
+                return { shouldSave: false };
+            }
+        } catch (error) {
+            restoreProfilePronounsInput(previousValue);
+            let validationErrorMessage =
+                'Pronouns could not be checked by Roblox. Please try again.';
+            if (error?.status === 400) {
+                validationErrorMessage =
+                    "Roblox's filter rejected these pronouns. Try a different value.";
+            } else if (error?.status === 429) {
+                validationErrorMessage =
+                    'The Roblox pronoun filter is busy. Please try again shortly.';
+            }
+            showSystemAlert(validationErrorMessage, 'warning');
+            return { shouldSave: false };
+        }
+    }
+
+    let apiSynced = false;
+    try {
+        const updatedValue = await updateUserSettingViaApi(
+            PROFILE_PRONOUNS_API_KEY,
+            normalizedValue || '',
+            {
+                throwOnError: true,
+                suppressErrorLog: true,
+            },
+        );
+        if (
+            updatedValue === false ||
+            normalizeProfilePronouns(updatedValue) !== normalizedValue
+        ) {
+            throw new Error('RoValra did not confirm the pronouns update.');
+        }
+        apiSynced = true;
+    } catch (error) {
+        console.warn(
+            'RoValra: Pronouns will remain local because API sync failed.',
+            error,
+        );
+    }
+
+    return {
+        shouldSave: true,
+        value: normalizedValue,
+        changed,
+        syncFailed: !apiSynced,
+    };
+}
 
 const isUnavailableSetting = (config) =>
     hasOwn(config, 'locked') || hasOwn(config, 'deprecated');
@@ -35,6 +179,40 @@ const getFeatureStatusPromptPills = () =>
         '<span class="rovalra-pill deprecated">Deprecated</span>',
     ].join('');
 
+function sanitizeCustomThemeSlots(value) {
+    if (!Array.isArray(value)) return [];
+
+    const slotsByIndex = new Map();
+
+    value.slice(0, 5).forEach((slot, fallbackIndex) => {
+        const source = slot && typeof slot === 'object' ? slot : {};
+        if (!slot || typeof slot !== 'object') return;
+
+        const rawSlotIndex = Number(source.slot ?? source.index);
+        const slotIndex = Number.isFinite(rawSlotIndex)
+            ? Math.max(0, Math.min(4, Math.round(rawSlotIndex)))
+            : fallbackIndex;
+        const name =
+            typeof source.name === 'string' && source.name.trim()
+                ? sanitizeString(source.name).slice(
+                      0,
+                      CUSTOM_THEME_NAME_MAX_LENGTH,
+                  )
+                : `Custom Theme ${slotIndex + 1}`;
+        const themeSource = source.theme || source.colors || source;
+
+        slotsByIndex.set(slotIndex, {
+            slot: slotIndex,
+            name,
+            theme: sanitizeCustomTheme(themeSource),
+        });
+    });
+
+    return [...slotsByIndex.values()].sort(
+        (left, right) => left.slot - right.slot,
+    );
+}
+
 const shouldShowFeatureStatusPrompt = async (config) => {
     if (!isStatusLabeledOffByDefaultSetting(config)) return false;
 
@@ -52,6 +230,31 @@ const shouldShowFeatureStatusPrompt = async (config) => {
 const markFeatureStatusPromptAcknowledged = async () => {
     await chrome.storage.local.set({ [FEATURE_STATUS_PROMPT_ACK_KEY]: true });
 };
+
+function queueGradientNameSync(settingsOverride = {}) {
+    if (gradientNameSyncTimeout) clearTimeout(gradientNameSyncTimeout);
+
+    gradientNameSyncTimeout = setTimeout(async () => {
+        if (currentUserTier < 3) return;
+
+        const settings = {
+            ...(await loadSettings()),
+            ...settingsOverride,
+        };
+        const gradient =
+            settings.displayNameGradientEnabled === false
+                ? { ...(settings.displayNameGradient || {}), enabled: false }
+                : settings.displayNameGradient;
+        const payload = serializeGradientNameSetting(
+            gradient,
+            settings.displayNameGradientEffect,
+        );
+
+        updateUserSettingViaApi('GradientName', payload).catch((error) =>
+            console.error('RoValra: GradientName sync failed', error),
+        );
+    }, 750);
+}
 
 export const getCurrentUserTier = () => currentUserTier;
 
@@ -213,21 +416,34 @@ export const loadSettings = async () => {
             }
         }
 
-        chrome.storage.local.get(defaultSettings, (settings) => {
-            if (chrome.runtime.lastError) {
-                console.error(
-                    'Failed to load settings:',
-                    chrome.runtime.lastError,
-                );
-                reject(chrome.runtime.lastError);
-            } else {
-                const normalisedSettings = settings;
-                for (const [key, value] of Object.entries(forcedSettings)) {
-                    normalisedSettings[key] = value;
+        chrome.storage.local.get(
+            { ...defaultSettings, [REMOTE_SETTING_LOCKS_KEY]: {} },
+            (settings) => {
+                if (chrome.runtime.lastError) {
+                    console.error(
+                        'Failed to load settings:',
+                        chrome.runtime.lastError,
+                    );
+                    reject(chrome.runtime.lastError);
+                } else {
+                    const remoteLocks =
+                        settings[REMOTE_SETTING_LOCKS_KEY] || {};
+                    delete settings[REMOTE_SETTING_LOCKS_KEY];
+
+                    if (settings[REMOTE_SETTING_OVERRIDE_KEY] !== true) {
+                        for (const key of Object.keys(remoteLocks)) {
+                            forcedSettings[key] = false;
+                        }
+                    }
+
+                    const normalisedSettings = settings;
+                    for (const [key, value] of Object.entries(forcedSettings)) {
+                        normalisedSettings[key] = value;
+                    }
+                    resolve(normalisedSettings);
                 }
-                resolve(normalisedSettings);
-            }
-        });
+            },
+        );
     });
 };
 
@@ -330,9 +546,25 @@ export const handleSaveSettings = async (settingName, value) => {
     }
 
     try {
+        const [remoteLocks, remoteOverride] = await Promise.all([
+            getRemoteSettingLocks(),
+            chrome.storage.local.get({
+                [REMOTE_SETTING_OVERRIDE_KEY]: false,
+            }),
+        ]);
+        if (
+            remoteLocks[settingName] &&
+            value !== false &&
+            remoteOverride[REMOTE_SETTING_OVERRIDE_KEY] !== true
+        ) {
+            value = false;
+        }
+
         const settingConfig = findSettingConfig(settingName);
 
         let sanitizedValue = value;
+        let profilePronounsChanged = false;
+        let profilePronounsSyncFailed = false;
 
         if (settingConfig) {
             switch (settingConfig.type) {
@@ -380,6 +612,35 @@ export const handleSaveSettings = async (settingName, value) => {
                     } else if (typeof value === 'string') {
                         sanitizedValue = sanitizeString(value);
 
+                        if (settingConfig.trim) {
+                            sanitizedValue = sanitizedValue.trim();
+                        }
+
+                        sanitizedValue = applyCharacterReplacements(
+                            sanitizedValue,
+                            settingConfig.characterReplacements,
+                        );
+
+                        if (settingConfig.replaceSpecialCharactersWithPipe) {
+                            sanitizedValue =
+                                replacePronounSpecialCharacters(sanitizedValue);
+                        }
+
+                        if (
+                            Number.isInteger(settingConfig.maxLength) &&
+                            settingConfig.maxLength > 0
+                        ) {
+                            sanitizedValue = settingConfig.useGraphemeLength
+                                ? truncateProfilePronouns(
+                                      sanitizedValue,
+                                      settingConfig.maxLength,
+                                  )
+                                : sanitizedValue.slice(
+                                      0,
+                                      settingConfig.maxLength,
+                                  );
+                        }
+
                         if (
                             settingConfig.type === 'select' &&
                             settingConfig.options
@@ -388,6 +649,7 @@ export const handleSaveSettings = async (settingName, value) => {
                             if (settingConfig.options === 'REGIONS') {
                                 validValues = ['AUTO', ...Object.keys(REGIONS)];
                             } else if (settingConfig.options === 'BORDERS') {
+                                validValues = [];
                             } else if (Array.isArray(settingConfig.options)) {
                                 validValues = settingConfig.options.map(
                                     (opt) =>
@@ -429,6 +691,18 @@ export const handleSaveSettings = async (settingName, value) => {
                                 Math.min(100, parseInt(value.fade, 10) || 0),
                             ),
                         };
+                        if (
+                            settingConfig.colorCount >= 3 ||
+                            settingConfig.default?.color3
+                        ) {
+                            sanitizedValue.color3 = sanitizeString(
+                                String(
+                                    value.color3 ||
+                                        settingConfig.default?.color3 ||
+                                        '#f093fb',
+                                ),
+                            );
+                        }
                     } else {
                         console.warn(
                             `Invalid string value for '${settingName}' - converting to string and sanitizing`,
@@ -476,7 +750,25 @@ export const handleSaveSettings = async (settingName, value) => {
                         }
                     }
                     break;
+
+                case 'themeEditor':
+                    sanitizedValue = sanitizeCustomTheme(value);
+                    break;
+
+                case 'themeSlots':
+                    sanitizedValue = sanitizeCustomThemeSlots(value);
+                    break;
             }
+        }
+
+        if (settingName === PROFILE_PRONOUNS_SETTING_NAME) {
+            const pronounsUpdate =
+                await prepareProfilePronounsUpdate(sanitizedValue);
+            if (!pronounsUpdate.shouldSave) return;
+
+            sanitizedValue = pronounsUpdate.value;
+            profilePronounsChanged = pronounsUpdate.changed;
+            profilePronounsSyncFailed = pronounsUpdate.syncFailed;
         }
 
         const settings = { [settingName]: sanitizedValue };
@@ -492,6 +784,17 @@ export const handleSaveSettings = async (settingName, value) => {
                     reject(chrome.runtime.lastError);
                 } else {
                     syncToSettingsKey(settingName, sanitizedValue);
+                    if (
+                        settingName === REMOTE_SETTING_OVERRIDE_KEY &&
+                        sanitizedValue === true
+                    ) {
+                        refreshRemoteSettingLocks().catch((error) =>
+                            console.warn(
+                                'RoValra: Failed to restore remotely disabled settings for developer override.',
+                                error,
+                            ),
+                        );
+                    }
                     if (settingName === 'profileGradient' && sanitizedValue) {
                         if (gradientSyncTimeout)
                             clearTimeout(gradientSyncTimeout);
@@ -511,6 +814,15 @@ export const handleSaveSettings = async (settingName, value) => {
                                 );
                             }
                         }, 1000);
+                    }
+                    if (
+                        settingName === 'displayNameGradientEnabled' ||
+                        settingName === 'displayNameGradient' ||
+                        settingName === 'displayNameGradientEffect'
+                    ) {
+                        queueGradientNameSync({
+                            [settingName]: sanitizedValue,
+                        });
                     }
                     if (settingName === 'avatarBorderChoice') {
                         const isDonator = currentUserTier >= 3;
@@ -551,14 +863,31 @@ export const handleSaveSettings = async (settingName, value) => {
                             );
                     }
 
+                    const savedSettingDetail = {
+                        name: settingName,
+                        value: sanitizedValue,
+                    };
                     document.dispatchEvent(
                         new CustomEvent('rovalra:settingSaved', {
-                            detail: {
-                                name: settingName,
-                                value: sanitizedValue,
-                            },
+                            detail: savedSettingDetail,
                         }),
                     );
+                    dispatchPageEvent(
+                        document,
+                        'rovalra:pageSettingSaved',
+                        savedSettingDetail,
+                    );
+
+                    if (profilePronounsChanged || profilePronounsSyncFailed) {
+                        showSystemAlert(
+                            profilePronounsSyncFailed
+                                ? 'Pronouns saved locally, but public API sync is currently unavailable.'
+                                : sanitizedValue
+                                  ? 'Pronouns updated!'
+                                  : 'Pronouns removed successfully!',
+                            profilePronounsSyncFailed ? 'warning' : 'success',
+                        );
+                    }
 
                     resolve();
                 }
@@ -694,11 +1023,20 @@ export const initSettings = async (settingsContent) => {
                                 settings[settingName] || setting.default,
                             );
                         }
+                    } else if (setting.type === 'themeEditor') {
+                        if (element.rovalraThemeEditorApi) {
+                            element.rovalraThemeEditorApi.setValue(
+                                settings[settingName] || setting.default,
+                            );
+                        }
                     } else if (
                         setting.type === 'input' ||
                         setting.type === 'color'
                     ) {
-                        element.value = settings[settingName] || '';
+                        const savedValue = settings[settingName] || '';
+                        element.value = setting.maxLength
+                            ? String(savedValue).slice(0, setting.maxLength)
+                            : savedValue;
                         element.dispatchEvent(
                             new Event('input', { bubbles: true }),
                         );
@@ -790,11 +1128,24 @@ export const initSettings = async (settingsContent) => {
                                             childSetting.default,
                                     );
                                 }
+                            } else if (childSetting.type === 'themeEditor') {
+                                if (childElement.rovalraThemeEditorApi) {
+                                    childElement.rovalraThemeEditorApi.setValue(
+                                        settings[childName] ||
+                                            childSetting.default,
+                                    );
+                                }
                             } else if (
                                 childSetting.type === 'input' ||
                                 childSetting.type === 'color'
                             ) {
-                                childElement.value = settings[childName] || '';
+                                const savedValue = settings[childName] || '';
+                                childElement.value = childSetting.maxLength
+                                    ? String(savedValue).slice(
+                                          0,
+                                          childSetting.maxLength,
+                                      )
+                                    : savedValue;
                                 childElement.dispatchEvent(
                                     new Event('input', { bubbles: true }),
                                 );
@@ -979,6 +1330,9 @@ export const checkSettingLocks = async (settingsContent, currentSettings) => {
     const data = await chrome.storage.local.get([
         'profile3DRenderForceDisabled',
     ]);
+    const remoteLocks = await getRemoteSettingLocks();
+    const remoteOverride =
+        currentSettings[REMOTE_SETTING_OVERRIDE_KEY] === true;
 
     const userTier = currentUserTier;
 
@@ -1000,6 +1354,19 @@ export const checkSettingLocks = async (settingsContent, currentSettings) => {
     for (const category of Object.values(SETTINGS_CONFIG)) {
         for (const [settingName, config] of Object.entries(category.settings)) {
             const processSetting = async (name, conf) => {
+                if (remoteLocks[name] && !remoteOverride) {
+                    if (currentSettings[name] !== false) {
+                        await handleSaveSettings(name, false);
+                    }
+                    applyLockedState(
+                        name,
+                        settingsContent,
+                        true,
+                        remoteLocks[name].reason || REMOTE_SETTING_LOCK_REASON,
+                    );
+                    return true;
+                }
+                let handledLockState = false;
                 if (conf.donatorTier) {
                     const isLocked = userTier < conf.donatorTier;
                     applyLockedState(
@@ -1011,6 +1378,7 @@ export const checkSettingLocks = async (settingsContent, currentSettings) => {
                         true,
                     );
                     if (isLocked) return true;
+                    handledLockState = true;
                 }
                 if (conf.locked) {
                     if (currentSettings[name] === true) {
@@ -1018,6 +1386,9 @@ export const checkSettingLocks = async (settingsContent, currentSettings) => {
                     }
                     applyLockedState(name, settingsContent, true, conf.locked);
                     return true;
+                }
+                if (!handledLockState) {
+                    applyLockedState(name, settingsContent, false);
                 }
                 return false;
             };
@@ -1034,6 +1405,21 @@ export const checkSettingLocks = async (settingsContent, currentSettings) => {
         }
     }
 };
+
+if (typeof chrome !== 'undefined' && chrome.storage?.onChanged) {
+    chrome.storage.onChanged.addListener(async (changes, areaName) => {
+        if (areaName !== 'local' || !changes[REMOTE_SETTING_LOCKS_KEY]) return;
+
+        const settingsContent = document.querySelector(
+            '#setting-section-content',
+        );
+        if (!settingsContent) return;
+
+        const currentSettings = await loadSettings();
+        updateConditionalSettingsVisibility(settingsContent, currentSettings);
+        await checkSettingLocks(settingsContent, currentSettings);
+    });
+}
 
 function applyDisabledState(
     settingName,
@@ -1101,6 +1487,7 @@ export function updateConditionalSettingsVisibility(
     }
 
     const settingsToDisable = new Set();
+    const settingsToHide = new Set();
 
     for (const [settingName, isEnabled] of Object.entries(currentSettings)) {
         const config = findSettingConfig(settingName);
@@ -1115,9 +1502,14 @@ export function updateConditionalSettingsVisibility(
                         currentSettings[childConfig.condition.parent] !==
                         childConfig.condition.value
                     ) {
+                        settingsToHide.add(childName);
                         settingsToDisable.add(childName);
                     }
-                } else if (config.type === 'checkbox' && !isEnabled) {
+                } else if (
+                    config.type === 'checkbox' &&
+                    !config.keepChildSettingsEnabled &&
+                    !isEnabled
+                ) {
                     settingsToDisable.add(childName);
                 }
             }
@@ -1129,6 +1521,24 @@ export function updateConditionalSettingsVisibility(
     );
     allSettingElements.forEach((element) => {
         const settingName = element.dataset.settingName;
+        const wrapper =
+            element.closest('.child-setting-item') ||
+            element.closest('.setting');
+        if (wrapper) {
+            wrapper.style.display = settingsToHide.has(settingName)
+                ? 'none'
+                : '';
+        }
+
+        const separator = settingsContent.querySelector(
+            `.child-setting-separator[data-child-setting-name="${settingName}"]`,
+        );
+        if (separator) {
+            separator.style.display = settingsToHide.has(settingName)
+                ? 'none'
+                : '';
+        }
+
         applyDisabledState(
             settingName,
             settingsContent,
@@ -1157,17 +1567,10 @@ export function updateConditionalSettingsVisibility(
     });
 }
 
-function normalizePermissionList(permission) {
-    return [].concat(permission)
-        .map((perm) => (perm === 'contextMenus' ? 'menus' : perm))
-        .filter(Boolean);
-}
-
 async function hasPermission(permission) {
-    const normalizedPermission = normalizePermissionList(permission);
     return new Promise((resolve) => {
         chrome.runtime.sendMessage(
-            { action: 'checkPermission', permission: normalizedPermission },
+            { action: 'checkPermission', permission: permission },
             (response) => {
                 if (chrome.runtime.lastError) {
                     console.error(
@@ -1183,14 +1586,13 @@ async function hasPermission(permission) {
 }
 
 async function requestPermission(permission) {
-    const normalizedPermission = normalizePermissionList(permission);
     return new Promise((resolve) => {
         chrome.runtime.sendMessage(
-            { action: 'requestPermission', permission: normalizedPermission },
+            { action: 'requestPermission', permission: permission },
             (response) => {
                 if (chrome.runtime.lastError) {
                     console.warn(
-                        `RoValra: Permission request for '${normalizedPermission.join(', ')}' failed or was dismissed:`,
+                        `RoValra: Permission request for '${permission}' failed or was dismissed:`,
                         chrome.runtime.lastError.message,
                     );
                     resolve(false);
@@ -1202,14 +1604,13 @@ async function requestPermission(permission) {
 }
 
 async function revokePermission(permission) {
-    const normalizedPermission = normalizePermissionList(permission);
     return new Promise((resolve) => {
         chrome.runtime.sendMessage(
-            { action: 'revokePermission', permission: normalizedPermission },
+            { action: 'revokePermission', permission: permission },
             (response) => {
                 if (chrome.runtime.lastError) {
                     console.error(
-                        `RoValra: Failed to revoke '${normalizedPermission.join(', ')}' permission:`,
+                        `RoValra: Failed to revoke '${permission}' permission:`,
                         chrome.runtime.lastError.message,
                     );
                     resolve(false);
@@ -1689,11 +2090,15 @@ export function initializeSettingsEventListeners() {
                 if (settingConfig?.exclusiveWith) {
                     settingConfig.exclusiveWith.forEach(
                         (exclusiveSettingName) => {
-                            const exclusiveElement = document.querySelector(
-                                `#${exclusiveSettingName}`,
-                            );
-                            if (exclusiveElement?.checked) {
-                                exclusiveElement.checked = false;
+                            if (
+                                findSettingConfig(exclusiveSettingName) != null
+                            ) {
+                                const exclusiveElement = document.querySelector(
+                                    `#${exclusiveSettingName}`,
+                                );
+                                if (exclusiveElement?.checked) {
+                                    exclusiveElement.checked = false;
+                                }
                                 savePromises.push(
                                     handleSaveSettings(
                                         exclusiveSettingName,

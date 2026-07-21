@@ -1,6 +1,7 @@
 const esbuild = require('esbuild');
 const fs = require('fs');
 const path = require('path');
+const yaml = require('yaml');
 let sass = null;
 try {
     sass = require('sass');
@@ -14,6 +15,155 @@ const dracoPath = path.join(
     'dist',
     'draco_decoder.js',
 );
+const swaggerUiCssPath = path.join(
+    __dirname,
+    'node_modules',
+    'swagger-ui-dist',
+    'swagger-ui.css',
+);
+const backgroundEntryPath = path.join(
+    __dirname,
+    'src',
+    'background',
+    'background.js',
+);
+const interceptEntryPath = path.join(
+    __dirname,
+    'src',
+    'content',
+    'core',
+    'xhr',
+    'intercept.js',
+);
+const contentEntryPath = path.join(__dirname, 'src', 'content', 'index.js');
+const firefoxBridgeEntryPath = path.join(
+    __dirname,
+    'src',
+    'content',
+    'firefoxBridge.js',
+);
+const extensionApiCompatPath = path.join(
+    __dirname,
+    'src',
+    'platform',
+    'extensionApiCompat.js',
+);
+const roavatarFirefoxCompatPath = path.join(
+    __dirname,
+    'src',
+    'platform',
+    'roavatarFirefoxCompat.js',
+);
+const roavatarRendererPath = path.join(
+    __dirname,
+    'node_modules',
+    'roavatar-renderer',
+    'dist',
+    'index.js',
+);
+
+const roavatarImageLoaderSource = `              const image = new Image();
+              image.onload = () => {
+                cacheResolve(image);
+                resolve(image);
+                CACHE.Image.set(cacheURL, image);
+              };
+              image.onerror = () => {
+                cacheResolve(void 0);
+                resolve(void 0);
+                CACHE.Image.set(cacheURL, void 0);
+              };
+              image.crossOrigin = "anonymous";
+              image.src = fetchStr;`;
+
+const roavatarImageLoaderReplacement = `              loadFirefoxCleanImage(fetchStr, FLAGS.FETCH_FUNC || fetch).then((image) => {
+                cacheResolve(image);
+                resolve(image);
+                CACHE.Image.set(cacheURL, image);
+              }).catch(() => {
+                cacheResolve(void 0);
+                resolve(void 0);
+                CACHE.Image.set(cacheURL, void 0);
+              });`;
+
+const roavatarInstanceWrapperStaticSource = `  static() {
+    return this.constructor;
+  }
+  static IsA(className) {`;
+
+const roavatarInstanceWrapperStaticReplacement = `  static() {
+    const wrapperClass = ClassNameToWrapper.get(this.instance.className);
+    if (!wrapperClass) {
+      throw new Error(\`RoAvatar Firefox wrapper lookup failed for \${this.instance.className}.\`);
+    }
+    return wrapperClass;
+  }
+  static IsA(className) {`;
+
+const roavatarFirefoxCompatPlugin = {
+    name: 'roavatar-firefox-compat',
+    setup(build) {
+        build.onLoad(
+            {
+                filter: /roavatar-renderer[\\/]dist[\\/]index\.js$/,
+            },
+            (args) => {
+                let contents = fs.readFileSync(args.path, 'utf8');
+                const arrayBufferCheck =
+                    /([A-Za-z_$][\w$]*) instanceof ArrayBuffer/g;
+                const responseCheck = /([A-Za-z_$][\w$]*) instanceof Response/g;
+                const arrayBufferCheckCount =
+                    contents.match(arrayBufferCheck)?.length || 0;
+                const responseCheckCount =
+                    contents.match(responseCheck)?.length || 0;
+
+                if (arrayBufferCheckCount !== 5) {
+                    throw new Error(
+                        `Expected five RoAvatar ArrayBuffer checks, found ${arrayBufferCheckCount}.`,
+                    );
+                }
+                if (responseCheckCount !== 25) {
+                    throw new Error(
+                        `Expected 25 RoAvatar Response checks, found ${responseCheckCount}.`,
+                    );
+                }
+                if (!contents.includes(roavatarImageLoaderSource)) {
+                    throw new Error(
+                        'Could not find RoAvatar image loader for the Firefox compatibility patch.',
+                    );
+                }
+                if (!contents.includes(roavatarInstanceWrapperStaticSource)) {
+                    throw new Error(
+                        'Could not find RoAvatar InstanceWrapper.static() for the Firefox compatibility patch.',
+                    );
+                }
+
+                contents = contents.replace(
+                    arrayBufferCheck,
+                    'isFirefoxRealmArrayBuffer($1)',
+                );
+                contents = contents.replace(
+                    responseCheck,
+                    'isFirefoxRealmResponse($1)',
+                );
+                contents = contents.replace(
+                    roavatarImageLoaderSource,
+                    roavatarImageLoaderReplacement,
+                );
+                contents = contents.replace(
+                    roavatarInstanceWrapperStaticSource,
+                    roavatarInstanceWrapperStaticReplacement,
+                );
+
+                return {
+                    contents,
+                    loader: 'js',
+                    resolveDir: path.dirname(roavatarRendererPath),
+                };
+            },
+        );
+    },
+};
 
 const manifestPath = path.join(__dirname, 'manifest.json');
 const packagePath = path.join(__dirname, 'package.json');
@@ -44,11 +194,13 @@ const bannerText = `/*!
  */`;
 
 const commonConfig = {
-    minify: true,
+    minify: false,
 
-    minifyWhitespace: true,
+    target: ['firefox140'],
+
+    minifyWhitespace: false,
     minifySyntax: true,
-    minifyIdentifiers: true,
+    minifyIdentifiers: false,
 
     keepNames: true,
 
@@ -80,18 +232,28 @@ function compileScssFile(inputFile, outputFile) {
 esbuild
     .build({
         ...commonConfig,
-        entryPoints: ['src/background/background.js'],
+        entryPoints: [backgroundEntryPath],
         outfile: 'dist/background.js',
         bundle: true,
+        inject: [extensionApiCompatPath],
     })
     .catch(() => process.exit(1));
 
 esbuild
     .build({
         ...commonConfig,
-        entryPoints: ['src/content/core/xhr/intercept.js'],
+        entryPoints: [interceptEntryPath],
         outfile: 'dist/intercept.js',
         bundle: false,
+    })
+    .catch(() => process.exit(1));
+
+esbuild
+    .build({
+        ...commonConfig,
+        entryPoints: [firefoxBridgeEntryPath],
+        outfile: 'dist/firefox-bridge.js',
+        bundle: true,
     })
     .catch(() => process.exit(1));
 
@@ -110,6 +272,24 @@ if (sass && fs.existsSync(cssDir)) {
             );
             console.log(
                 'Compiled SCSS: src/css/main.scss -> dist/css/rovalra.css',
+            );
+        } catch (e) {
+            console.error('SCSS Compilation Failed:', e.message);
+        }
+    }
+
+    const sitewideScss = path.join(cssDir, 'sitewide.scss');
+    if (fs.existsSync(sitewideScss)) {
+        try {
+            const result = sass.compile(sitewideScss, { style: 'expanded' });
+            if (!fs.existsSync('dist/css'))
+                fs.mkdirSync('dist/css', { recursive: true });
+            fs.writeFileSync(
+                'dist/css/sitewide.css',
+                bannerText + '\n' + result.css,
+            );
+            console.log(
+                'Compiled SCSS: src/css/sitewide.scss -> dist/css/sitewide.css',
             );
         } catch (e) {
             console.error('SCSS Compilation Failed:', e.message);
@@ -144,17 +324,25 @@ if (!fs.existsSync(dracoPath)) {
     process.exit(1);
 }
 const dracoSource = fs.readFileSync(dracoPath, 'utf8');
+if (!fs.existsSync('dist')) fs.mkdirSync('dist', { recursive: true });
+fs.writeFileSync('dist/draco_decoder.js', `${bannerText}\n${dracoSource}`);
+console.log('Copied Draco decoder: dist/draco_decoder.js');
 
 esbuild
     .build({
         ...commonConfig,
-        entryPoints: ['src/content/index.js'],
+        entryPoints: [contentEntryPath],
         outfile: 'dist/content.js',
         bundle: true,
-        // This injects Draco directly into the content script context for roavatar-renderer
-        banner: {
-            js: bannerText + '\n' + dracoSource,
-        },
+        loader: { '.rbxm': 'base64' },
+        inject: [extensionApiCompatPath, roavatarFirefoxCompatPath],
+        plugins: [roavatarFirefoxCompatPlugin],
+        minify: true,
+        minifyWhitespace: true,
+        minifySyntax: true,
+        minifyIdentifiers: true,
+        pure: ['console.debug', 'console.log'],
+        keepNames: true,
     })
     .catch(() => process.exit(1));
 if (fs.existsSync(cssDir)) {
@@ -172,6 +360,16 @@ if (fs.existsSync(cssDir)) {
             })
             .catch(() => process.exit(1));
     }
+}
+
+if (fs.existsSync(swaggerUiCssPath)) {
+    if (!fs.existsSync('dist/css'))
+        fs.mkdirSync('dist/css', { recursive: true });
+    fs.copyFileSync(swaggerUiCssPath, 'dist/css/swagger-ui.css');
+    console.log('Copied Swagger UI CSS: dist/css/swagger-ui.css');
+} else {
+    console.error(`Error: swagger-ui.css not found at ${swaggerUiCssPath}`);
+    process.exit(1);
 }
 
 function processDirectory(src, dest) {
@@ -194,9 +392,9 @@ function processDirectory(src, dest) {
 
                     const result = esbuild.transformSync(content, {
                         loader: ext.slice(1),
-                        minifyWhitespace: true,
+                        minifyWhitespace: false,
                         minifySyntax: true,
-                        minifyIdentifiers: true,
+                        minifyIdentifiers: false,
                         keepNames: true,
                         legalComments: 'none',
                         banner: bannerText,
@@ -210,6 +408,17 @@ function processDirectory(src, dest) {
                         err,
                     );
                     fs.copyFileSync(srcPath, destPath);
+                }
+            } else if (ext === '.yaml') {
+                try {
+                    const data = yaml.parse(fs.readFileSync(srcPath, 'utf8'));
+                    fs.writeFileSync(
+                        destPath.slice(0, destPath.length - 4) + 'json',
+                        JSON.stringify(data, undefined, ' '),
+                    );
+                } catch (err) {
+                    console.error(`Error processing ${entry.name}.`, err);
+                    throw err;
                 }
             } else {
                 fs.copyFileSync(srcPath, destPath);
@@ -228,8 +437,8 @@ if (fs.existsSync('assets')) {
 if (fs.existsSync('manifest.json')) {
     try {
         const manifestContent = fs.readFileSync('manifest.json', 'utf8');
-        const manifestJson = JSON.parse(manifestContent);
-        fs.writeFileSync('dist/manifest.json', JSON.stringify(manifestJson, null, 4) + '\n');
+        JSON.parse(manifestContent);
+        fs.copyFileSync('manifest.json', 'dist/manifest.json');
     } catch (e) {
         console.log(e);
         fs.copyFileSync('manifest.json', 'dist/manifest.json');

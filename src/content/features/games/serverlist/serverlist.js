@@ -1,4 +1,5 @@
 import { callRobloxApi } from '../../../core/api.js';
+import { dispatchPageEvent } from '../../../core/firefox/pageBridge.js';
 import { fetchThumbnails } from '../../../core/thumbnail/thumbnails.js';
 import { launchGame } from '../../../core/utils/launcher.js';
 import { initServerIdExtraction } from '../../../core/games/servers/serverids.js';
@@ -253,12 +254,11 @@ async function isServerActive(placeId, gameId) {
     try {
         const response = await callRobloxApi({
             subdomain: 'gamejoin',
-            endpoint: '/v1/join-game-instance',
+            endpoint: '/v2/join-game-instance',
             method: 'POST',
             body: {
                 placeId: parseInt(placeId, 10),
                 gameId: gameId,
-                isTeleport: false,
             },
         });
         if (!response.ok) return false;
@@ -778,11 +778,9 @@ async function getReactServerId(element) {
 
         window.addEventListener('rovalra-serverid-extracted', listener);
 
-        window.dispatchEvent(
-            new CustomEvent('rovalra-extract-serverid-request', {
-                detail: { extractionId },
-            }),
-        );
+        dispatchPageEvent(window, 'rovalra-extract-serverid-request', {
+            extractionId,
+        });
 
         setTimeout(() => {
             window.removeEventListener('rovalra-serverid-extracted', listener);
