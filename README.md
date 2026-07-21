@@ -45,8 +45,9 @@ It helps a lot and supports continued development.
 
 ### Option 1: Firefox Addon Store (Recommended)
 
-Install directly from the [Firefox Add-on Store](https://addons.mozilla.org/en-US/firefox/addon/rovalra-rav4/)
-
+<details>
+<summary><strong>Install directly from the [Firefox Add-on Store](https://addons.mozilla.org/en-US/firefox/addon/rovalra-rav4/)</strong></summary>
+</details>
 ---
 
 ### Option 2: Manual Installation 
