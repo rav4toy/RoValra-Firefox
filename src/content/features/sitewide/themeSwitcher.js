@@ -1,4 +1,5 @@
 import { settings } from '../../core/settings/getSettings';
+import { observeAttributes } from '../../core/observer.js';
 import {
     CUSTOM_THEME_FIELDS,
     DEFAULT_CUSTOM_THEME,
@@ -27,12 +28,39 @@ function getThemeByStorageKey(key) {
     return undefined;
 }
 
+function getNativeThemeKey() {
+    if (document.body.classList.contains('dark-theme')) return 'builtin-dark';
+    if (document.body.classList.contains('light-theme')) return 'builtin-light';
+    return undefined;
+}
+
+function getManagedThemeClasses() {
+    const managedClasses = new Set();
+
+    for (const theme of Object.values(ThemeData)) {
+        if (theme.PrimaryClass === null) continue;
+        for (const className of GetClassList(theme)) {
+            managedClasses.add(className);
+        }
+    }
+
+    return managedClasses;
+}
+
 /** @type {Theme | undefined} */
 let OriginalTheme = undefined;
 
 /** @type {boolean} */
 let storageListenerRegistered = false;
 let themeSwitcherInitialized = false;
+let themeOperation = Promise.resolve();
+let themeDataPromise = null;
+let themeEnforcementEnabled = false;
+let activeThemeKey = null;
+let activeCustomThemeValue = undefined;
+let themeRepairScheduled = false;
+let initialThemeReady = false;
+let resolveInitialThemeReady = null;
 
 /** @type {Record<string, Theme>} */
 let ThemeData = {};
@@ -45,10 +73,27 @@ const CUSTOM_THEME_FIELD_MAP = new Map(
 async function loadThemeData() {
     if (Object.keys(ThemeData).length > 0) return;
 
-    const response = await fetch(
+    if (themeDataPromise) return themeDataPromise;
+
+    themeDataPromise = fetch(
         chrome.runtime.getURL(`public/Assets/data/RuntimeData/ThemeData.json`),
-    ); // Verified
-    ThemeData = await response.json();
+    ) // Verified
+        .then((response) => response.json())
+        .then((data) => {
+            ThemeData = data;
+        })
+        .catch((error) => {
+            themeDataPromise = null;
+            throw error;
+        });
+
+    return themeDataPromise;
+}
+
+function queueThemeOperation(operation) {
+    const queuedOperation = themeOperation.then(operation, operation);
+    themeOperation = queuedOperation.catch(() => {});
+    return queuedOperation;
 }
 
 /**
@@ -56,7 +101,7 @@ async function loadThemeData() {
  * @param {object | undefined} customThemeValue
  * @returns {Promise<void>}
  */
-export async function setTheme(themeKey, customThemeValue) {
+async function applyTheme(themeKey, customThemeValue) {
     await loadThemeData();
 
     const theme = getThemeByStorageKey(themeKey);
@@ -65,16 +110,19 @@ export async function setTheme(themeKey, customThemeValue) {
         return;
     }
 
-    const desiredClasses = new Set(GetClassList(theme));
-    const managedClasses = new Set();
-
-    for (const theme of Object.values(ThemeData)) {
-        if (theme.PrimaryClass !== null) {
-            for (const className of GetClassList(theme)) {
-                managedClasses.add(className);
-            }
-        }
+    let resolvedCustomThemeValue = customThemeValue;
+    if (themeKey === 'custom-user' && resolvedCustomThemeValue === undefined) {
+        const storedTheme = await chrome.storage.local.get({
+            customUserTheme: DEFAULT_CUSTOM_THEME,
+        });
+        resolvedCustomThemeValue = storedTheme.customUserTheme;
     }
+
+    activeThemeKey = themeKey;
+    activeCustomThemeValue = resolvedCustomThemeValue;
+
+    const desiredClasses = new Set(GetClassList(theme));
+    const managedClasses = getManagedThemeClasses();
 
     for (const className of managedClasses) {
         if (
@@ -92,15 +140,51 @@ export async function setTheme(themeKey, customThemeValue) {
     }
 
     if (themeKey === 'custom-user') {
-        applyCustomTheme(
-            customThemeValue === undefined
-                ? await settings.customUserTheme
-                : customThemeValue,
+        applyCustomTheme(resolvedCustomThemeValue);
+    }
+}
+
+function clearCustomThemeVariables() {
+    for (const field of CUSTOM_THEME_FIELDS) {
+        document.body.style.removeProperty(
+            `--rovalra-custom-user-${field.key}`,
         );
     }
 }
 
+async function disableThemeEnforcement() {
+    const restoreTheme = activeThemeKey ? OriginalTheme : undefined;
+
+    themeEnforcementEnabled = false;
+    activeThemeKey = null;
+    activeCustomThemeValue = undefined;
+
+    // On startup, Default/disabled must be completely passive so Roblox can
+    // apply and persist its own Light/Dark/System preference. If a RoValra
+    // override was active in this page, restore the native theme once.
+    if (restoreTheme) {
+        await applyTheme(restoreTheme);
+        activeThemeKey = null;
+        activeCustomThemeValue = undefined;
+    }
+
+    clearCustomThemeVariables();
+}
+
+export function setTheme(themeKey, customThemeValue) {
+    if (themeKey === 'default') {
+        return queueThemeOperation(() => disableThemeEnforcement());
+    }
+
+    themeEnforcementEnabled = true;
+    return queueThemeOperation(() => applyTheme(themeKey, customThemeValue));
+}
+
 async function PrepareRenderedTheme(changes = null) {
+    return queueThemeOperation(() => prepareRenderedTheme(changes));
+}
+
+async function prepareRenderedTheme(changes = null) {
     const themeSwitcherEnabled = changes?.ThemeSwitcherEnabled
         ? changes.ThemeSwitcherEnabled.newValue
         : await settings.ThemeSwitcherEnabled;
@@ -109,13 +193,7 @@ async function PrepareRenderedTheme(changes = null) {
         : await settings.ThemeSwitcher;
     await loadThemeData();
 
-    if (OriginalTheme === undefined) {
-        if (document.body.matches('.light-theme'))
-            OriginalTheme = 'builtin-light';
-
-        if (document.body.matches('.dark-theme'))
-            OriginalTheme = 'builtin-dark';
-    }
+    if (OriginalTheme === undefined) OriginalTheme = getNativeThemeKey();
 
     if (!storageListenerRegistered) {
         storageListenerRegistered = true;
@@ -143,23 +221,21 @@ async function PrepareRenderedTheme(changes = null) {
         });
     }
 
-    if (!themeSwitcherEnabled) {
-        await setTheme(OriginalTheme ?? 'builtin-dark');
+    if (!themeSwitcherEnabled || theme === 'default') {
+        await disableThemeEnforcement();
         return;
     }
 
-    switch (theme) {
-        case 'default':
-            await setTheme(OriginalTheme ?? 'builtin-dark');
-            break;
+    themeEnforcementEnabled = true;
 
+    switch (theme) {
         case 'builtin-light':
         case 'builtin-dark':
         case 'custom-nighty':
         case 'custom-sunset':
         case 'custom-highcontrast':
         case 'custom-user':
-            await setTheme(theme, changes?.customUserTheme?.newValue);
+            await applyTheme(theme, changes?.customUserTheme?.newValue);
             break;
 
         case theme:
@@ -223,5 +299,86 @@ export function init() {
     if (themeSwitcherInitialized) return;
     themeSwitcherInitialized = true;
 
-    return PrepareRenderedTheme(); // Reduce glitching on page load if selected theme visually conflicts with Roblox theme
+    observeAttributes(
+        document.body,
+        () => {
+            if (!themeEnforcementEnabled) {
+                OriginalTheme = getNativeThemeKey() ?? OriginalTheme;
+                return;
+            }
+
+            if (!activeThemeKey || themeRepairScheduled) {
+                return;
+            }
+
+            const activeTheme = getThemeByStorageKey(activeThemeKey);
+            const desiredClasses = new Set(
+                activeTheme ? GetClassList(activeTheme) : [],
+            );
+            const hasUnexpectedManagedClass = [
+                ...getManagedThemeClasses(),
+            ].some(
+                (className) =>
+                    !desiredClasses.has(className) &&
+                    document.body.classList.contains(className),
+            );
+            if (
+                !activeTheme ||
+                (GetClassList(activeTheme).every((className) =>
+                    document.body.classList.contains(className),
+                ) &&
+                    !hasUnexpectedManagedClass)
+            ) {
+                return;
+            }
+
+            themeRepairScheduled = true;
+            queueThemeOperation(() =>
+                applyTheme(activeThemeKey, activeCustomThemeValue),
+            )
+                .catch((error) =>
+                    console.error(
+                        'RoValra: Failed to repair the selected theme.',
+                        error,
+                    ),
+                )
+                .finally(() => {
+                    themeRepairScheduled = false;
+                });
+        },
+        ['class'],
+    );
+
+    window.addEventListener('themeDetected', (event) => {
+        const detectedTheme = event.detail?.theme;
+        if (!themeEnforcementEnabled) {
+            if (detectedTheme === 'light') OriginalTheme = 'builtin-light';
+            if (detectedTheme === 'dark') OriginalTheme = 'builtin-dark';
+        }
+
+        if (!initialThemeReady) {
+            initialThemeReady = true;
+            resolveInitialThemeReady?.();
+            resolveInitialThemeReady = null;
+            return;
+        }
+
+        PrepareRenderedTheme().catch((error) =>
+            console.error(
+                'RoValra: Failed to apply the detected theme.',
+                error,
+            ),
+        );
+    });
+
+    const waitForInitialTheme = new Promise((resolve) => {
+        resolveInitialThemeReady = resolve;
+    });
+    const timeout = new Promise((resolve) => setTimeout(resolve, 1500));
+
+    return Promise.race([waitForInitialTheme, timeout]).then(() => {
+        initialThemeReady = true;
+        resolveInitialThemeReady = null;
+        return PrepareRenderedTheme();
+    });
 }

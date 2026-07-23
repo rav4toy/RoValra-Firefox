@@ -73,6 +73,10 @@ import {
     getActiveModeration,
     getModerationStatusLabel,
 } from '../../core/moderationStatus.js';
+import {
+    loadFirefoxChangelogReleases,
+    sortChangelogReleasesByVersion,
+} from './changelogs.js';
 
 const assets = getAssets();
 let REGIONS = {};
@@ -157,6 +161,12 @@ function renderChangelogRelease(release) {
         dates.appendChild(chromeDate);
     }
 
+    if (release.firefox_release_date) {
+        const firefoxDate = document.createElement('span');
+        firefoxDate.textContent = `Firefox: ${release.firefox_release_date}`;
+        dates.appendChild(firefoxDate);
+    }
+
     titleGroup.append(title, dates);
 
     header.appendChild(titleGroup);
@@ -189,7 +199,21 @@ async function getChangelogs() {
     }
 
     const data = await response.json();
-    changelogsCache = Array.isArray(data?.releases) ? data.releases : [];
+    const githubAndChromeReleases = Array.isArray(data?.releases)
+        ? data.releases
+        : [];
+    let firefoxReleases = [];
+
+    try {
+        firefoxReleases = await loadFirefoxChangelogReleases();
+    } catch (error) {
+        console.warn('RoValra: Failed to load Firefox changelogs', error);
+    }
+
+    changelogsCache = sortChangelogReleasesByVersion([
+        ...githubAndChromeReleases,
+        ...firefoxReleases,
+    ]);
     return changelogsCache;
 }
 

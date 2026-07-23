@@ -4,8 +4,12 @@ import { getAuthenticatedUserId } from '../../user.js';
 
 const STORAGE_KEY = 'rovalra_client_channel_assignments';
 const LAST_REPORTED_AT_STORAGE_KEY = 'rovalra_client_channel_last_reported_at';
+const NEXT_REPORT_ATTEMPT_AT_STORAGE_KEY =
+    'rovalra_client_channel_next_report_attempt_at';
 const POLL_INTERVAL_MS = 5 * 60 * 1000;
 const REPORT_REFRESH_INTERVAL_MS = 2 * 60 * 60 * 1000;
+const REPORT_FAILURE_RETRY_DELAY_MS = 15 * 60 * 1000;
+const MAX_REPORT_RETRY_DELAY_MS = 24 * 60 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 30 * 1000;
 const BINARY_TYPES = [
     'PS4App',
@@ -77,6 +81,34 @@ async function writeLastReportedAt(userId, timestamp) {
     });
 }
 
+async function readNextReportAttemptAt(userId) {
+    try {
+        const storage = await chrome.storage.local.get(
+            NEXT_REPORT_ATTEMPT_AT_STORAGE_KEY,
+        );
+        const timestamp = storage[NEXT_REPORT_ATTEMPT_AT_STORAGE_KEY]?.[userId];
+        return typeof timestamp === 'number' ? timestamp : 0;
+    } catch (error) {
+        console.warn(
+            'RoValra: Failed to read client channel retry timestamp',
+            error,
+        );
+        return 0;
+    }
+}
+
+async function writeNextReportAttemptAt(userId, timestamp) {
+    const storage = await chrome.storage.local.get(
+        NEXT_REPORT_ATTEMPT_AT_STORAGE_KEY,
+    );
+    await chrome.storage.local.set({
+        [NEXT_REPORT_ATTEMPT_AT_STORAGE_KEY]: {
+            ...(storage[NEXT_REPORT_ATTEMPT_AT_STORAGE_KEY] || {}),
+            [userId]: timestamp,
+        },
+    });
+}
+
 function assignmentsMatch(first, second) {
     return (
         first?.channelName === second?.channelName &&
@@ -136,18 +168,43 @@ async function fetchAssignment(binaryType) {
 }
 
 async function reportAssignments(assignments) {
-    const response = await callRobloxApi({
+    return callRobloxApi({
         subdomain: 'apis',
         endpoint: '/v1/channels/enrollments',
         method: 'POST',
         isRovalraApi: true,
         body: assignments,
         noCache: true,
+        retryOnTransientStatus: false,
+        suppressErrorLog: true,
     });
+}
 
-    if (!response.ok) {
-        throw new Error(`Enrollment API returned HTTP ${response.status}`);
+function getReportRetryDelay(response) {
+    const retryAfter = response?.headers?.get('retry-after');
+    let delay = 0;
+
+    if (retryAfter) {
+        const seconds = Number(retryAfter);
+        if (Number.isFinite(seconds)) {
+            delay = seconds * 1000;
+        } else {
+            const retryAt = Date.parse(retryAfter);
+            if (Number.isFinite(retryAt)) delay = retryAt - Date.now();
+        }
     }
+
+    if (!(delay > 0)) {
+        delay =
+            response?.status === 429
+                ? REPORT_REFRESH_INTERVAL_MS
+                : REPORT_FAILURE_RETRY_DELAY_MS;
+    }
+
+    return Math.min(
+        MAX_REPORT_RETRY_DELAY_MS,
+        Math.max(POLL_INTERVAL_MS, delay),
+    );
 }
 
 export async function updateClientChannelAssignments() {
@@ -158,6 +215,10 @@ export async function updateClientChannelAssignments() {
 
         const userId = await getAuthenticatedUserId();
         if (!userId) return [];
+
+        const now = Date.now();
+        const nextReportAttemptAt = await readNextReportAttemptAt(userId);
+        if (now < nextReportAttemptAt) return [];
 
         const savedAssignments = await readSavedAssignments(userId);
         const results = await Promise.allSettled(
@@ -204,7 +265,24 @@ export async function updateClientChannelAssignments() {
 
         if (await settings.disableChannelTracking) return [];
 
-        await reportAssignments(assignmentsToReport);
+        let reportResponse;
+        try {
+            reportResponse = await reportAssignments(assignmentsToReport);
+        } catch {
+            await writeNextReportAttemptAt(
+                userId,
+                Date.now() + REPORT_FAILURE_RETRY_DELAY_MS,
+            );
+            return [];
+        }
+
+        if (!reportResponse.ok) {
+            await writeNextReportAttemptAt(
+                userId,
+                Date.now() + getReportRetryDelay(reportResponse),
+            );
+            return [];
+        }
 
         const updatedAssignments = { ...savedAssignments };
         changedAssignments.forEach((assignment) => {
@@ -214,6 +292,7 @@ export async function updateClientChannelAssignments() {
             await writeSavedAssignments(userId, updatedAssignments);
         }
         await writeLastReportedAt(userId, Date.now());
+        await writeNextReportAttemptAt(userId, 0);
 
         return assignmentsToReport;
     })().finally(() => {

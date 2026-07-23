@@ -39,15 +39,16 @@ let navbarInitialized = false;
 function getThemeClass(themeSelection) {
     if (themeSelection === 'kids') return 'age-kids-theme';
     if (themeSelection === 'startmode') return 'age-startmode-theme';
-    if (themeSelection === 'select') return 'age-select-theme'
-    return 'age-roblox-theme';
+    if (themeSelection === 'select') return 'age-select-theme';
+    return null;
 }
 
 function applyAgeTheme(themeSelection) {
     if (!document.body) return;
 
     document.body.classList.remove(...AGE_THEME_CLASSES);
-    document.body.classList.add(getThemeClass(themeSelection));
+    const themeClass = getThemeClass(themeSelection);
+    if (themeClass) document.body.classList.add(themeClass);
 }
 
 function updateSelectedMenuItem(menu, themeSelection) {
@@ -74,9 +75,7 @@ async function addAgeThemeNavbarButton(currentTheme) {
     const button = await createNavbarButton({
         id: 'rovalra-age-theme-toggle',
         iconSvgData: getAssets().ageThemeIcon,
-        tooltipText: await t('ageTheme.navbarTooltip').catch(
-            () => 'Age Theme',
-        ),
+        tooltipText: await t('ageTheme.navbarTooltip').catch(() => 'Age Theme'),
     });
 
     if (!button) return;

@@ -1033,7 +1033,7 @@ export const SETTINGS_CONFIG = {
             usernameColor: {
                 label: 'Username Color Preview',
                 description: [
-                    "Changes the user's display name color on their profile to what color Roblox would give them when talking in game chats. Inspired by https://github.com/RyloRiz/rblx-name-color",
+                    "Changes the user's username color on their profile to what color Roblox would give them when talking in game chats. Inspired by https://github.com/RyloRiz/rblx-name-color",
                 ],
                 type: 'checkbox',
                 default: false,
@@ -1130,6 +1130,15 @@ export const SETTINGS_CONFIG = {
                 ],
                 type: 'checkbox',
                 default: true,
+            },
+            HideAddFriendsButton: {
+                label: 'Hide Add Friends Button',
+                description: [
+                    'Hides the Add Friends button from the Home page and allows friend cards to use the freed space.',
+                ],
+                type: 'checkbox',
+                default: false,
+                contributors: ['476449201'],
             },
             homeLayoutEnabled: {
                 label: 'Home Layout',
@@ -1631,6 +1640,19 @@ export const SETTINGS_CONFIG = {
                     'rovalra_sidebar_layout_hidden',
                 ],
             },
+            topbarLayoutEnabled: {
+                label: 'Topbar Layout',
+                description: [
+                    'Lets you reorder and hide buttons in the Roblox topbar.',
+                ],
+                type: 'checkbox',
+                default: false,
+                contributors: ['476449201'],
+                storageKey: [
+                    'rovalra_topbar_layout_order',
+                    'rovalra_topbar_layout_hidden',
+                ],
+            },
             ageKidsThemeEnabled: {
                 label: 'Age Theme',
                 description: [
@@ -1644,8 +1666,10 @@ export const SETTINGS_CONFIG = {
                 childSettings: {
                     ageThemeSelection: {
                         label: 'Theme',
-                        description:
+                        description: [
                             'Choose which Roblox age theme class should be applied.',
+                            'Normal Roblox preserves your native Light, Dark, or System browser preference.',
+                        ],
                         type: 'select',
                         options: [
                             { label: 'Normal Roblox', value: 'normal' },

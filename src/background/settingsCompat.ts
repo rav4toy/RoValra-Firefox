@@ -1,18 +1,30 @@
 /// <reference types="chrome" />
 
-const settingDeprecations: Record<string, ((value: any, gets: (key: string) => Promise<any>, sets: (key: string, value: any) => void) => void) | undefined> = {
-    "EnableGameTrailer": undefined,
-    "trustedConnectionsEnabled": undefined,
-    "currencyTransferEnabled": undefined,
+const settingDeprecations: Record<
+    string,
+    | ((
+          value: any,
+          gets: (key: string) => Promise<any>,
+          sets: (key: string, value: any) => void,
+      ) => void)
+    | undefined
+> = {
+    EnableGameTrailer: undefined,
+    trustedConnectionsEnabled: undefined,
+    currencyTransferEnabled: undefined,
 };
 
+import { SETTINGS_CONFIG } from '../content/core/settings/settingConfig.js';
+import { debugVerbose, flush } from '../content/core/debug.js';
 
-import { SETTINGS_CONFIG } from "../content/core/settings/settingConfig.js";
-import { debugVerbose, flush } from "../content/core/debug.js";
+let compatResults: { replaced: string[]; deleted: string[] } = {
+    replaced: [],
+    deleted: [],
+};
 
-let compatResults: { replaced: string[]; deleted: string[] } | null = null;
-
-const getStoredSettingValue: (s: string) => Promise<any | undefined> = async (setting: string) => {
+const getStoredSettingValue: (s: string) => Promise<any | undefined> = async (
+    setting: string,
+) => {
     const individual = await chrome.storage.local.get({
         [setting]: undefined,
     });
@@ -21,9 +33,9 @@ const getStoredSettingValue: (s: string) => Promise<any | undefined> = async (se
         return individual[setting];
     }
 
-    const bundled = await chrome.storage.local.get({
+    const bundled = (await chrome.storage.local.get({
         rovalra_settings: {},
-    }) as { rovalra_settings?: Record<string, any>};
+    })) as { rovalra_settings?: Record<string, any> };
 
     return bundled.rovalra_settings?.[setting];
 };
@@ -36,7 +48,7 @@ for (const category of Object.values(SETTINGS_CONFIG)) {
     }
 }
 
-const cleanup = (async () => {
+const cleanup = async () => {
     // Removed for data safety purposes
     //
     //const settings = await chrome.storage.local.get(null);
@@ -49,10 +61,10 @@ const cleanup = (async () => {
     //        debugVerbose(`Cleaning up setting ${key}.`, {value: value, default: data.default});
     //    }
     //}
-});
+};
 
-const init = (async () => {
-    console.debug("RoValra: Verifying settings compat.");
+const init = async () => {
+    console.debug('RoValra: Verifying settings compat.');
 
     let deleted = [];
     let replaced = [];
@@ -60,10 +72,12 @@ const init = (async () => {
         try {
             let v: any = undefined;
             if ((v = await getStoredSettingValue(setting)) === true) {
-                debugVerbose(`Replaced setting ${setting}.`, {replacement: String(replaceFn)});
+                debugVerbose(`Replaced setting ${setting}.`, {
+                    replacement: String(replaceFn),
+                });
                 if (replaceFn === undefined) {
                     deleted.push(FLAT_SETTINGS_CONFIG[setting].label);
-                    
+
                     // // Removed for data safety purposes
                     //if (FLAT_SETTINGS_CONFIG[setting].default === true)
                     //    await chrome.storage.local.set({[setting]: false});
@@ -74,18 +88,31 @@ const init = (async () => {
                         const replacements: Record<string, any> = {};
                         await replaceFn(
                             v,
-                            async (key) => (await chrome.storage.local.get({[key]: undefined}))[key],
-                            (key, newValue) => {replacements[key] = newValue;}
+                            async (key) =>
+                                (
+                                    await chrome.storage.local.get({
+                                        [key]: undefined,
+                                    })
+                                )[key],
+                            (key, newValue) => {
+                                replacements[key] = newValue;
+                            },
                         );
                         await chrome.storage.local.set(replacements);
                         replaced.push(setting);
                     } catch (e) {
-                        console.error(`Failed to update setting ${setting} — unexpected error: `, e);
+                        console.error(
+                            `Failed to update setting ${setting} — unexpected error: `,
+                            e,
+                        );
                     }
                 }
             }
         } catch (e) {
-            console.error(`Failed to retrieve setting ${setting} for compat checks — unexpected error: `, e);
+            console.error(
+                `Failed to retrieve setting ${setting} for compat checks — unexpected error: `,
+                e,
+            );
         }
     }
     const forEachLockedSetting = (key: string, data: Record<string, any>) => {
@@ -94,7 +121,10 @@ const init = (async () => {
     };
     for (const [category, settings] of Object.entries(SETTINGS_CONFIG)) {
         for (const [setting, data] of Object.entries(settings.settings)) {
-            if (data['locked'] !== undefined || data['deprecated'] !== undefined) {
+            if (
+                data['locked'] !== undefined ||
+                data['deprecated'] !== undefined
+            ) {
                 let value = await getStoredSettingValue(setting);
                 if (value !== undefined && value !== false) {
                     debugVerbose(`Locked/deprecated setting: ${setting}`, data);
@@ -106,7 +136,7 @@ const init = (async () => {
                     //else
                     //    await chrome.storage.local.set({[setting]: false});
 
-                    await chrome.storage.local.set({[setting]: false});
+                    await chrome.storage.local.set({ [setting]: false });
                 }
             }
         }
@@ -116,23 +146,36 @@ const init = (async () => {
 
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         if (tabs[0]?.id) {
-            chrome.tabs.sendMessage(tabs[0].id, { type: "settingsCompatResultData", replaced: replaced, deleted: deleted }, () => {});
+            chrome.tabs.sendMessage(
+                tabs[0].id,
+                {
+                    type: 'settingsCompatResultData',
+                    replaced: replaced,
+                    deleted: deleted,
+                },
+                () => {},
+            );
         }
     });
 
     await cleanup();
     flush();
 
-    console.debug("Setting compat checks finished.");
-});
+    console.debug('Setting compat checks finished.');
+};
 
-chrome.runtime.onMessage.addListener((message: any, sender: unknown, sendResponse: (...args: any[]) => void) => {
-    if (message.type === "settingsCompatGetRes") {
-        debugVerbose("Recieved signal settingsCompatGetRes.", {message: message, data: compatResults});
+chrome.runtime.onMessage.addListener(
+    (message: any, sender: unknown, sendResponse: (...args: any[]) => void) => {
+        if (message?.type !== 'settingsCompatGetRes') return false;
+
+        debugVerbose('Recieved signal settingsCompatGetRes.', {
+            message: message,
+            data: compatResults,
+        });
         sendResponse(compatResults);
-        compatResults = {replaced: [], deleted: []};
-    }
-    return true;
-});
+        compatResults = { replaced: [], deleted: [] };
+        return false;
+    },
+);
 
 export default init;

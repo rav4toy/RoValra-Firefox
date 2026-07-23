@@ -432,6 +432,8 @@ export async function callRobloxApi(options) {
             useApiKey = false,
             noCache = false,
             responseType = 'text',
+            retryOnTransientStatus = true,
+            suppressErrorLog = false,
         } = options;
 
         const normalizedHeaders = new Headers(headers);
@@ -611,7 +613,9 @@ export async function callRobloxApi(options) {
         if (isRovalraApi) {
             let lastResponse;
             let authRetried = false;
+            let attemptsMade = 0;
             for (let attempt = 0; attempt < 4; attempt++) {
+                attemptsMade = attempt + 1;
                 try {
                     lastResponse = await fetchInBackground(
                         fullUrl,
@@ -731,16 +735,21 @@ export async function callRobloxApi(options) {
                         return lastResponse;
                     }
 
+                    if (!retryOnTransientStatus) break;
+
                     if (endpoint && endpoint.includes('/v1/auth')) break;
                 } catch (error) {
                     if (
+                        !retryOnTransientStatus ||
                         attempt === 3 ||
                         (endpoint && endpoint.includes('/v1/auth'))
                     ) {
-                        console.error(
-                            `RoValra API: Request to ${fullUrl} failed${attempt === 3 ? ' after multiple retries' : ''}.`,
-                            error,
-                        );
+                        if (!suppressErrorLog) {
+                            console.error(
+                                `RoValra API: Request to ${fullUrl} failed${attemptsMade > 1 ? ' after multiple attempts' : ''}.`,
+                                error,
+                            );
+                        }
                         throw error;
                     }
                 }
@@ -748,9 +757,9 @@ export async function callRobloxApi(options) {
                     await new Promise((res) => setTimeout(res, 1000));
                 }
             }
-            if (!lastResponse.ok) {
+            if (!lastResponse.ok && !suppressErrorLog) {
                 console.error(
-                    `RoValra API: Request to ${fullUrl} failed with status ${lastResponse.status} after multiple retries.`,
+                    `RoValra API: Request to ${fullUrl} failed with status ${lastResponse.status}${attemptsMade > 1 ? ' after multiple attempts' : ''}.`,
                 );
             }
             return lastResponse;
@@ -859,9 +868,11 @@ export async function callRobloxApi(options) {
         }
 
         if (!response.ok) {
-            console.error(
-                `RoValra API: Request to ${fullUrl} failed with status ${response.status}.`,
-            );
+            if (!suppressErrorLog) {
+                console.error(
+                    `RoValra API: Request to ${fullUrl} failed with status ${response.status}.`,
+                );
+            }
 
             if (useApiKey && response.status === 401) {
                 await invalidateApiKey();

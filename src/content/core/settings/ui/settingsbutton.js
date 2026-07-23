@@ -66,7 +66,7 @@ export function addCustomButton(debouncedAddPopoverButton) {
             window.location.reload();
         } else {
             window.location.href =
-                'https://www.roblox.com/my/account?rovalra=info#!/info';
+                'https://www.roblox.com/my/account?rovalra=info';
         }
     });
 

@@ -90,6 +90,7 @@ async function fetchAndProcessSettings(userId, options = {}) {
                         endpoint: '/v1/auth/settings',
                         method: 'GET',
                         noCache: true,
+                        retryOnTransientStatus: false,
                     });
 
                     if (data.status === 'success' && data.setting) {
@@ -119,6 +120,7 @@ async function fetchAndProcessSettings(userId, options = {}) {
                 endpoint: `/v1/users/${userId}/settings`,
                 method: 'GET',
                 noCache: options.noCache || isOwnProfile,
+                retryOnTransientStatus: false,
             });
         }
 
@@ -231,6 +233,7 @@ async function processBatchQueue() {
                 subdomain: 'apis',
                 endpoint: `/v1/users/settings?user_ids=${userIdsToFetchStrings.join(',')}`,
                 method: 'GET',
+                retryOnTransientStatus: false,
             });
 
             if (data.status === 'success' && data.settings) {
@@ -507,6 +510,7 @@ export async function updateUserSettingViaApi(key, value, options = {}) {
             endpoint: '/v1/auth/settings',
             method: 'POST',
             body: JSON.stringify({ key, value: apiValue }),
+            retryOnTransientStatus: false,
         });
         if (
             response &&

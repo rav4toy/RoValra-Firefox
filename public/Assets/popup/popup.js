@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', function() {
 
   const links = {
-    'settings-link': 'https://www.roblox.com/my/account?rovalra=info#!/info',
+    'settings-link': 'https://www.roblox.com/my/account?rovalra=info',
     'discord-link': 'https://discord.gg/GHd5cSKJRk',
     'donate-link': 'https://www.roblox.com/games/store-section/9452973012',
     'github-link': 'https://github.com/NotValra/RoValra'
