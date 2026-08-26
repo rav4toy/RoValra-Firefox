@@ -256,6 +256,15 @@ function removeCountryFromRegion(regionName) {
     return filtered.join(', ') || regionName;
 }
 
+function normalizeRegionName(...values) {
+    const parts = values
+        .flatMap((value) => (Array.isArray(value) ? value : [value]))
+        .filter((value) => typeof value === 'string')
+        .map((value) => value.trim())
+        .filter((value) => value && !/^unknown$/i.test(value));
+    return [...new Set(parts)].join(', ') || null;
+}
+
 export function getOrCreateDetailsContainer(server) {
     if (!isServerListModificationsEnabled) {
         return server.querySelector(`.${CLASSES.CONTAINER}`);
@@ -424,8 +433,6 @@ export function displayPerformance(server, fps, serverLocations = {}) {
         return;
     }
 
-    if (serverLocations[server.dataset.rovalraServerid] === 'private') return;
-
     const container = getOrCreateDetailsContainer(server);
     let text = 'Server Performance Unknown';
     let icon = ICONS.performanceHigh;
@@ -456,8 +463,6 @@ export function displayUptime(
         return;
     }
 
-    if (serverLocations[server.dataset.rovalraServerid] === 'private') return;
-
     const container = getOrCreateDetailsContainer(server);
     let text = '1m~';
     let visible = true;
@@ -482,11 +487,19 @@ export function displayPlaceVersion(server, version, serverLocations = {}) {
         return;
     }
 
-    if (serverLocations[server.dataset.rovalraServerid] === 'private') return;
-
     const container = getOrCreateDetailsContainer(server);
     let text = 'Version Unknown';
     let visible = false;
+
+    const existingVersion = container.querySelector(`.${CLASSES.Version}`);
+    if (
+        (!version || version === 'Unknown') &&
+        existingVersion &&
+        existingVersion.style.display !== 'none' &&
+        existingVersion.textContent.includes('Version ')
+    ) {
+        return existingVersion;
+    }
 
     if (version && version !== 'Unknown') {
         text = `Version ${version}`;
@@ -559,6 +572,16 @@ export function displayRegion(server, regionName, serverLocations = {}) {
     }
 }
 
+function displayRegionForServerId(serverId, regionName, serverLocations) {
+    if (!serverId) return;
+
+    document
+        .querySelectorAll(`[data-rovalra-serverid="${serverId}"]`)
+        .forEach((server) =>
+            displayRegion(server, regionName, serverLocations),
+        );
+}
+
 export function displayIpAndDcId(server) {
     let extraDiv = server.querySelector('.rovalra-server-extra-details');
 
@@ -608,7 +631,19 @@ export function displayServerFullStatus(server) {
     }
 
     const container = getOrCreateDetailsContainer(server);
-    container.querySelector(`.${CLASSES.Region}`)?.remove();
+    const regionElement = container.querySelector(`.${CLASSES.Region}`);
+    const hasRegion =
+        regionElement &&
+        regionElement.style.display !== 'none' &&
+        !['Unknown', 'N/A', 'Unknown Region'].includes(
+            regionElement.textContent.trim(),
+        );
+
+    if (hasRegion) {
+        container.querySelector(`.${CLASSES.Full}`)?.remove();
+        return;
+    }
+
     updateInfoElement(container, 'Full', ICONS.full, 'Server is Full', true);
 }
 
@@ -659,6 +694,7 @@ export async function fetchServerUptime(
     serverIds,
     serverLocations,
     serverUptimes,
+    serverStatuses = {},
 ) {
     const validIds = serverIds.filter((id) => id && id !== 'null');
     if (!validIds.length) return;
@@ -692,8 +728,9 @@ export async function fetchServerUptime(
 
             const versionToDisplay = getServerVersion(serverId) || placeVersion;
 
-            if (region) {
-                serverLocations[serverId] = region;
+            const normalizedRegion = normalizeRegionName(region);
+            if (normalizedRegion) {
+                serverLocations[serverId] = normalizedRegion;
             }
 
             const serverEls = document.querySelectorAll(
@@ -711,8 +748,8 @@ export async function fetchServerUptime(
                     serverLocations,
                 );
                 displayUptime(serverEl, uptime, isEstimate, serverLocations);
-                if (region) {
-                    displayRegion(serverEl, region, serverLocations);
+                if (normalizedRegion) {
+                    displayRegion(serverEl, normalizedRegion, serverLocations);
                 }
                 displayIpAndDcId(serverEl);
             });
@@ -731,7 +768,8 @@ export async function fetchServerUptime(
                         getServerUptimeIsEstimate(id),
                         serverLocations,
                     );
-                    if (!getServerRegion(id)) displayServerFullStatus(el);
+                    if (!getServerRegion(id) && !serverStatuses[id])
+                        displayServerFullStatus(el);
                 });
             });
     } catch (e) {
@@ -758,9 +796,11 @@ export async function fetchAndDisplayRegion(
     serverLocations,
     options = {},
 ) {
+    const serverStatuses = options.serverStatuses || {};
     let placeId = server.dataset.placeid || getPlaceIdFromUrl();
     if (!placeId) {
-        if (!serverLocations[serverId]) displayServerFullStatus(server);
+        if (!serverLocations[serverId] && !serverStatuses[serverId])
+            displayServerFullStatus(server);
         return;
     }
 
@@ -769,7 +809,10 @@ export async function fetchAndDisplayRegion(
 
         if (server.dataset.rovalraServerid !== serverId) return;
 
-        const joinBtn = server.querySelector('.game-server-join-btn');
+        const joinBtn = server.querySelector(
+            '.game-server-join-btn, .rovalra-join-btn',
+        );
+        const status = Number(info.status);
 
         if (info.joinScript) {
             const joinScript = info.joinScript;
@@ -806,37 +849,40 @@ export async function fetchAndDisplayRegion(
             }
         }
 
-        if (info.status === 12) {
+        if (status === 12) {
             if (info.message?.includes('private instance')) {
             } else if (
                 info.message?.toLowerCase().includes('purchase access')
             ) {
-                if (!serverLocations[serverId]) {
-                    serverLocations[serverId] = 'purchase';
+                if (!serverStatuses[serverId]) {
+                    serverStatuses[serverId] = 'purchase';
                     displayPurchaseGameStatus(server);
                 }
                 return;
             }
         }
 
-        if (info.status === 5) {
-            if (!serverLocations[serverId]) {
-                serverLocations[serverId] = 'inactive';
+        if (status === 5) {
+            if (!serverStatuses[serverId]) {
+                serverStatuses[serverId] = 'inactive';
                 displayInactivePlaceStatus(server);
             }
             return;
         }
 
-        if (info.status === 22) {
+        if (status === 22) {
             if (isFullServerIndicatorsEnabled) {
                 if (joinBtn) {
-                    joinBtn.textContent = 'Server Full';
+                    const joinLabel =
+                        joinBtn.querySelector('.text-no-wrap') || joinBtn;
+                    joinLabel.textContent = 'Join (Server Full)';
                     joinBtn.classList.replace(
                         'btn-primary-md',
                         'btn-secondary-md',
                     );
                 }
-                if (!serverLocations[serverId]) displayServerFullStatus(server);
+                serverStatuses[serverId] = 'full';
+                displayServerFullStatus(server);
             }
             return;
         }
@@ -849,11 +895,7 @@ export async function fetchAndDisplayRegion(
             );
         }
 
-        if (
-            !serverLocations[serverId] ||
-            serverLocations[serverId] === 'Unknown Region' ||
-            serverLocations[serverId] === 'Unknown'
-        ) {
+        if (!serverLocations[serverId]) {
             const dcId = info.joinScript?.DataCenterId;
             let locInfo =
                 dcId && serverIpMap?.[dcId] ? serverIpMap[dcId] : null;
@@ -864,13 +906,23 @@ export async function fetchAndDisplayRegion(
             }
 
             if (locInfo) {
-                const fullName = getFullLocationName(locInfo);
-                serverLocations[serverId] = fullName;
-                displayRegion(server, fullName, serverLocations);
+                const fullName = normalizeRegionName(
+                    getFullLocationName(locInfo),
+                );
+                if (fullName) {
+                    serverLocations[serverId] = fullName;
+
+                    displayRegionForServerId(
+                        serverId,
+                        fullName,
+                        serverLocations,
+                    );
+                }
             }
         }
     } catch (err) {
-        if (!serverLocations[serverId]) displayServerFullStatus(server);
+        if (!serverLocations[serverId] && !serverStatuses[serverId])
+            displayServerFullStatus(server);
     }
 }
 
@@ -960,6 +1012,7 @@ export async function enhanceServer(server, context) {
 
     const {
         serverLocations,
+        serverStatuses = {},
         serverUptimes,
         serverPerformanceCache,
         uptimeBatch,
@@ -1062,11 +1115,12 @@ export async function enhanceServer(server, context) {
                 : Math.max(0, (new Date() - date) / 1000);
             displayUptime(server, uptime, true, serverLocations);
         }
-        const locParts = [apiData.city, apiData.region, apiData.country].filter(
-            Boolean,
+        const locStr = normalizeRegionName(
+            apiData.city,
+            apiData.region,
+            apiData.country,
         );
-        if (locParts.length) {
-            const locStr = [...new Set(locParts)].join(', ');
+        if (locStr) {
             serverLocations[serverId] = locStr;
             displayRegion(server, locStr, serverLocations);
         }
@@ -1091,6 +1145,7 @@ export async function enhanceServer(server, context) {
     fetchAndDisplayRegion(server, serverId, serverIpMap, serverLocations, {
         isPrivate,
         accessCode: server.dataset.accessCode,
+        serverStatuses,
     });
 
     displayIpAndDcId(server);

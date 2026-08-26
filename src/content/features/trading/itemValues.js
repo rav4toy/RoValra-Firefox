@@ -29,6 +29,7 @@ import { getAuthenticatedUserId } from '../../core/user.js';
 let cardObserverRequest = null;
 let summaryObserverRequest = null;
 let robuxObserverRequest = null;
+let robuxInputObserverRequest = null;
 let dividerObserverRequest = null;
 let updateSummaryTimeout = null;
 let latestTradeDetailsId = null;
@@ -77,6 +78,10 @@ export function init() {
                 if (robuxObserverRequest) {
                     robuxObserverRequest.active = false;
                     robuxObserverRequest = null;
+                }
+                if (robuxInputObserverRequest) {
+                    robuxInputObserverRequest.active = false;
+                    robuxInputObserverRequest = null;
                 }
                 if (summaryObserverRequest) {
                     summaryObserverRequest.active = false;
@@ -133,31 +138,21 @@ export function init() {
                     if (card.dataset.rovalraProcessed) return;
 
                     let assetId;
-                    if (card.classList.contains('trade-request-item')) {
-                        if (
-                            card.classList.contains('blank-item') ||
-                            !card.hasAttribute('data-collectibleiteminstanceid')
-                        )
-                            return;
-                        const instanceId = card.getAttribute(
-                            'data-collectibleiteminstanceid',
-                        );
-                        const cached = getCachedItemValue(instanceId);
-                        if (cached && cached.assetId) {
-                            assetId = cached.assetId;
-                        } else {
-                            const link = card.querySelector(
-                                'a[href*="/catalog/"], a[href*="/bundles/"]',
-                            );
-                            if (link) assetId = getPlaceIdFromUrl(link.href);
-                        }
-                    } else {
-                        const link = card.querySelector(
-                            'a[href*="/catalog/"], a[href*="/bundles/"]',
-                        );
-                        if (!link) return;
-                        assetId = getPlaceIdFromUrl(link.href);
+                    const instanceId = card.getAttribute(
+                        'data-collectibleiteminstanceid',
+                    );
+                    const instanceCached = instanceId
+                        ? getCachedItemValue(instanceId)
+                        : null;
+                    if (instanceCached?.assetId) {
+                        assetId = instanceCached.assetId;
                     }
+
+                    const link = card.querySelector(
+                        'a[href*="/catalog/"], a[href*="/bundles/"]',
+                    );
+                    if (!assetId && link)
+                        assetId = getPlaceIdFromUrl(link.href);
                     if (!assetId) return;
 
                     card.dataset.rovalraProcessed = 'true';
@@ -199,6 +194,16 @@ export function init() {
                         if (robuxObserverRequest?.active)
                             queueUpdateTradeSummary();
                     }, ['class']);
+                    queueUpdateTradeSummary();
+                },
+                { multiple: true },
+            );
+
+            robuxInputObserverRequest = observeElement(
+                '.trade-request-window-offer input[name="robux"], .trade-request-window-offer input[placeholder*="Robux"]',
+                (input) => {
+                    input.addEventListener('input', queueUpdateTradeSummary);
+                    input.addEventListener('change', queueUpdateTradeSummary);
                     queueUpdateTradeSummary();
                 },
                 { multiple: true },
@@ -254,6 +259,22 @@ function getRolimonsUrl(card, assetId, options = {}) {
     }
 
     return `https://www.rolimons.com/item/${assetId}`;
+}
+
+function addUserTradeItemCardsBottomPadding(card) {
+    if (
+        !featureSettings.tradeShowItemValues ||
+        !/^\/(?:[^/]+\/)?users\/\d+\/trade(?:\/|$)/.test(
+            window.location.pathname,
+        ) ||
+        !card.classList.contains('item-card-container')
+    )
+        return;
+
+    const itemCardsList = card.closest(
+        'ul.item-cards.item-cards-stackable',
+    );
+    itemCardsList?.style.setProperty('padding-bottom', '20px', 'important');
 }
 
 // turns english into numbers so we can add locale support
@@ -381,6 +402,10 @@ export function updateItemCard(card, assetId, options = {}) {
                 valDiv.appendChild(rolimonsLink);
             }
             priceDiv.parentNode.insertBefore(valDiv, priceDiv.nextSibling);
+        }
+
+        if (card.querySelector('.rovalra-value-label')) {
+            addUserTradeItemCardsBottomPadding(card);
         }
     }
 
@@ -610,6 +635,8 @@ async function updateTradeSummary() {
         analysis = await getTradeAnalysis(tradeId, { myUserId }).catch(
             () => null,
         );
+    } else if (giveOffer.closest('.trade-request-window-offers')) {
+        analysis = getTradeRequestWindowAnalysis(giveOffer, receiveOffer);
     }
 
     if (!analysis) return;
@@ -636,6 +663,68 @@ async function updateTradeSummary() {
     }
 
     renderSummary(giveOffer, receiveOffer, giveStats, receiveStats);
+}
+
+function getTradeRequestWindowAnalysis(giveOffer, receiveOffer) {
+    const createStats = (offer) => {
+        const items = Array.from(
+            offer.querySelectorAll(
+                '.trade-request-item[data-rovalra-asset-id]',
+            ),
+        );
+        const stats = items.reduce(
+            (totals, card) => {
+                const assetId = card.dataset.rovalraAssetId;
+                const instanceId = card.dataset.collectibleiteminstanceid;
+                const cachedItem = instanceId
+                    ? getCachedItemValue(instanceId)
+                    : null;
+                const rolimonsItem = getCachedRolimonsItem(assetId);
+
+                totals.rap += Number(cachedItem?.rap ?? rolimonsItem?.rap ?? 0);
+                totals.value += Number(
+                    rolimonsItem?.default_price ??
+                        rolimonsItem?.rap ??
+                        cachedItem?.rap ??
+                        0,
+                );
+                totals.totalDemand += getDemandValue(rolimonsItem?.demand);
+                totals.itemCount += 1;
+                return totals;
+            },
+            { rap: 0, value: 0, totalDemand: 0, itemCount: 0 },
+        );
+
+        const robuxInput = offer.querySelector(
+            'input[name="robux"], input[placeholder*="Robux"]',
+        );
+        const offeredRobux =
+            Number((robuxInput?.value || '').replace(/[^\d]/g, '')) || 0;
+
+        return {
+            ...stats,
+            robux: offeredRobux,
+            offeredRobux,
+            receivedRobux: offeredRobux,
+        };
+    };
+
+    return {
+        myOffer: { stats: createStats(giveOffer) },
+        partnerOffer: { stats: createStats(receiveOffer) },
+    };
+}
+
+function getDemandValue(demand) {
+    const demandValues = {
+        None: 0,
+        Terrible: 1,
+        Low: 2,
+        Normal: 3,
+        High: 4,
+        Amazing: 5,
+    };
+    return demandValues[demand] ?? -1;
 }
 
 function getActiveTradeId(offerEl) {

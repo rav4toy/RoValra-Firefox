@@ -1,12 +1,54 @@
 // Everything thumbnail related should go through this.
 
+// Thumbnail sizes - Gemini LOL so if any are wrong that would be why
+/*
+30x30
+42x42
+50x50
+60x62
+75x75
+110x110
+140x140
+150x150
+160x100
+160x600
+250x250
+300x250
+352x352
+420x420
+480x270
+512x512
+728x90
+768x432
+*/
+
 import { callRobloxApi } from '../api.js';
+import { getUserAvatar } from '../apis/avatar.js';
+import { settings } from '../settings/getSettings.js';
 
 const BATCH_SIZE = 50;
 const MAX_RETRIES = 5;
 const RETRY_DELAY_MS = 1500;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function prepareThumbnailRequestBody(body) {
+    if (!(await settings.disableThumbnailBackground)) return body;
+
+    if (Array.isArray(body)) {
+        return body.map((request) =>
+            request && typeof request === 'object'
+                ? { ...request, includeBackground: false }
+                : request,
+        );
+    }
+
+    if (body && typeof body === 'object') {
+        return { ...body, includeBackground: false };
+    }
+
+    return body;
+}
 
 async function fetchBatchData(
     batch,
@@ -24,6 +66,7 @@ async function fetchBatchData(
             type: 'AvatarHeadshot',
             size: size,
             isCircular: isCircular,
+            includeBackground: true,
             requestId: `0:${item.id}:AvatarHeadshot:${size}:png:regular`,
         }));
 
@@ -32,7 +75,7 @@ async function fetchBatchData(
                 subdomain: 'thumbnails',
                 endpoint: '/v1/batch',
                 method: 'POST',
-                body: requestBody,
+                body: await prepareThumbnailRequestBody(requestBody),
                 signal: signal,
                 noCache: noCache,
             });
@@ -66,7 +109,7 @@ async function fetchBatchData(
                 subdomain: 'thumbnails',
                 endpoint: '/v1/batch',
                 method: 'POST',
-                body: requestBody,
+                body: await prepareThumbnailRequestBody(requestBody),
                 signal: signal,
                 noCache: noCache,
             });
@@ -78,6 +121,74 @@ async function fetchBatchData(
         } catch (error) {
             console.error(
                 `RoValra Thumbnails: Failed to fetch batch for "GameThumbnail".`,
+                error,
+            );
+        }
+        return results;
+    }
+
+    if (type === 'GroupIcon') {
+        const groupIconSize = '150x150';
+        const requestBody = batch.map((item) => ({
+            requestId: `${item.id}:undefined:GroupIcon:${groupIconSize}:webp:regular:0::false`,
+            type: 'GroupIcon',
+            targetId: Number(item.id),
+            format: 'webp',
+            size: groupIconSize,
+        }));
+
+        try {
+            const response = await callRobloxApi({
+                subdomain: 'thumbnails',
+                endpoint: '/v1/batch',
+                method: 'POST',
+                body: await prepareThumbnailRequestBody(requestBody),
+                signal,
+                noCache,
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data?.data) return data.data;
+            }
+        } catch (error) {
+            console.error(
+                'RoValra Thumbnails: Failed to fetch batch for "GroupIcon".',
+                error,
+            );
+        }
+        return results;
+    }
+
+    if (type === 'Outfit') {
+        const requestBody = batch.map((item) => ({
+            requestId: `${item.id}::Outfit:${size}:webp:regular:::true:false`,
+            type: 'Outfit',
+            targetId: Number(item.id),
+            token: '',
+            format: 'webp',
+            size: size,
+            version: '',
+            includeBackground: true,
+        }));
+
+        try {
+            const response = await callRobloxApi({
+                subdomain: 'thumbnails',
+                endpoint: '/v1/batch',
+                method: 'POST',
+                body: await prepareThumbnailRequestBody(requestBody),
+                signal,
+                noCache,
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data?.data) return data.data;
+            }
+        } catch (error) {
+            console.error(
+                'RoValra Thumbnails: Failed to fetch batch for "Outfit".',
                 error,
             );
         }
@@ -119,8 +230,14 @@ async function fetchBatchData(
     const ids = batch.map((item) => item.id).join(',');
 
     try {
-        let endpointUrl = `${mapping.path}?${mapping.idParam}=${ids}&size=${size}&format=Png&returnPolicy=PlaceHolder`;
+        const format = type === 'Asset' ? 'webp' : 'Png';
+        let endpointUrl = `${mapping.path}?${mapping.idParam}=${ids}&size=${size}&format=${format}&returnPolicy=PlaceHolder`;
         if (isCircular) endpointUrl += `&isCircular=true`;
+        if (type === 'AvatarHeadshot') {
+            const includeBackground =
+                (await settings.disableThumbnailBackground) ? 'false' : 'true';
+            endpointUrl += `&includeBackground=${includeBackground}`;
+        }
 
         const response = await callRobloxApi({
             subdomain: 'thumbnails',
@@ -356,11 +473,22 @@ export function createThumbnailElement(
         return el;
     };
 
+    const createImage = (imageUrl) => {
+        const image = document.createElement('img');
+        image.className = baseClass;
+        image.src = imageUrl;
+        image.onerror = () => {
+            if (image.parentNode) {
+                image.replaceWith(createCenteredIcon('icon-broken'));
+            }
+        };
+        return applyStyles(image);
+    };
+
     if (state === 'Completed') {
-        thumbnailElement = document.createElement('img');
-        thumbnailElement.className = baseClass;
-        thumbnailElement.src = thumbnailData.imageUrl;
-        return applyStyles(thumbnailElement);
+        return thumbnailData.imageUrl
+            ? createImage(thumbnailData.imageUrl)
+            : createCenteredIcon('icon-broken');
     }
 
     if (state === 'Blocked') {
@@ -393,11 +521,7 @@ export function createThumbnailElement(
                     }
 
                     if (updatedData.state === 'Completed') {
-                        const img = document.createElement('img');
-                        img.className = baseClass;
-                        img.src = updatedData.imageUrl;
-                        img.alt = altText;
-                        Object.assign(img.style, style);
+                        const img = createImage(updatedData.imageUrl);
 
                         if (container.parentNode) {
                             container.parentNode.replaceChild(img, container);
@@ -502,12 +626,7 @@ export async function fetchUserThumbnailWithApiKey(userId) {
 export function renderAvatarThumbnail(userId) {
     const fetchRender = async () => {
         try {
-            const avatarRes = await callRobloxApi({
-                subdomain: 'avatar',
-                endpoint: `/v2/avatar/users/${userId}/avatar`,
-            });
-            if (!avatarRes.ok) return null;
-            const avatarData = await avatarRes.json();
+            const avatarData = await getUserAvatar(userId);
 
             const payload = {
                 thumbnailConfig: {

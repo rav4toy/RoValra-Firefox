@@ -8,6 +8,7 @@ import { createPill } from '../../core/ui/general/pill.js';
 import { createFriendTile } from '../../core/ui/profile/userCard.js';
 import { callRobloxApiJson } from '../../core/api.js';
 import { getBatchThumbnails } from '../../core/thumbnail/thumbnails.js';
+import { Icon } from '../../core/ui/buildericon.js';
 function removeHomeElement() {
     const homeElementToRemove = document.querySelector(
         'li.cursor-pointer.btr-nav-node-header_home.btr-nav-header_home',
@@ -71,6 +72,7 @@ async function renderTestPage(contentDiv) {
                             'names.combinedName',
                             'isVerified',
                             'names.username',
+                            'hasRobloxSubscription',
                         ],
                     },
                 }),
@@ -94,11 +96,17 @@ async function renderTestPage(contentDiv) {
                     ? 'Hidden User'
                     : profile.names.combinedName;
                 const username = isHidden ? '' : `@${profile.names.username}`;
+                const isVerified = isHidden ? '' : profile.isVerified;
+                const isSubscribed = isHidden
+                    ? ''
+                    : profile.hasRobloxSubscription;
 
                 const tile = createFriendTile(item, thumbData, {
                     displayName,
                     username,
                     isHidden,
+                    isVerified,
+                    isSubscribed,
                 });
                 friendList.appendChild(tile);
             });
@@ -122,6 +130,8 @@ async function renderTestPage(contentDiv) {
     const LonggameId = 14056754882;
     const Longcard = createGameCard(LonggameId);
     container.appendChild(Longcard);
+
+    container.appendChild(createGameCard(82217838505836)); // Broken game card
     const itemId = 48894692;
     const itemCard = createItemCard(itemId);
     container.appendChild(itemCard);
@@ -134,6 +144,10 @@ async function renderTestPage(contentDiv) {
     container.appendChild(deletedItem);
     const baseballcap = createItemCard(607702162);
     container.appendChild(baseballcap);
+
+    container.appendChild(createItemCard(1180425352)); // Dominus Noctis
+
+    container.appendChild(createItemCard(119934643965525)); //fae
 
     const limiteduid = 16477149823;
     const limiteduitemCard = createItemCard(limiteduid);
@@ -158,6 +172,55 @@ async function renderTestPage(contentDiv) {
         onChange: (value) => console.log('Pill Toggle changed to:', value),
     });
     container.appendChild(pillToggle);
+
+    // Icons Test
+    const builderIconsHeader = document.createElement('h2');
+    builderIconsHeader.textContent = 'Icons';
+    builderIconsHeader.style.fontWeight = '800';
+    builderIconsHeader.style.fontSize = '2.5em';
+    builderIconsHeader.style.margin = '0';
+    const builderIcon = Icon({
+        icon: 'xr-headset',
+        size: 'xx-large',
+    });
+    const builderIconFilled = Icon({
+        icon: 'xr-headset',
+        filled: true,
+        size: 'xx-large',
+    });
+    const materialIcon = Icon({
+        icon: 'label',
+        material: true,
+        size: 'xx-large',
+    });
+    const materialIconFilled = Icon({
+        icon: 'label',
+        filled: true,
+        material: true,
+        size: 'xx-large',
+    });
+    const rovalraIcon = Icon({
+        icon: 'rovalra',
+        rovalra: true,
+        size: 'xx-large',
+    });
+    const rovalraContributorIcon = Icon({
+        icon: 'icon',
+        rovalra: true,
+        size: 'xx-large',
+    });
+    container.append(
+        document.createElement('br'),
+        builderIconsHeader,
+        document.createElement('br'),
+        builderIcon,
+        builderIconFilled,
+        materialIcon,
+        materialIconFilled,
+        rovalraIcon,
+        rovalraContributorIcon,
+    );
+
     removeHomeElement();
 }
 

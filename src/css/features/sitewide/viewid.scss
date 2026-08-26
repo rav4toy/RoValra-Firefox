@@ -1,0 +1,36 @@
+table.rovalra-viewid-table {
+    cursor: pointer;
+    transition: color 0.4s ease;
+}
+
+table.rovalra-viewid-table:hover {
+    color: rgb(194, 223, 250);
+    transition: color 0.2s ease;
+}
+
+table.rovalra-viewid-table:active {
+    color: rgb(134, 187, 255);
+}
+
+span.rovalra-viewid-single-copy {
+    cursor: copy;
+    text-decoration: underline dotted;
+}
+
+p .bright {
+    color: #fff;
+}
+
+button#rovalra-viewid-button-main, button#rovalra-viewid-button-sec {
+    transition: scale 0.3s ease;
+    cursor: pointer;
+
+    &:hover {
+        scale: 1.05;
+        transition: scale 0.1s ease;
+    }
+
+    &:active {
+        scale: 0.95;
+    }
+}

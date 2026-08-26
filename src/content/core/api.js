@@ -11,6 +11,8 @@ import { cloneIntoExtensionRealm } from './firefox/realm.js';
 
 import { updateUserLocationIfChanged } from './utils/location.js';
 const activeRequests = new Map();
+const responseCache = new Map();
+const USER_BADGES_CACHE_TTL_MS = 5 * 60 * 1000;
 let gameJoinErrorCount = 0;
 let lastGameJoinRequestTime = 0;
 const GAMEJOIN_TIMEOUT_MS = 2000;
@@ -84,6 +86,31 @@ function getRequestKey({
 function getCurrentNavigationKey() {
     if (typeof window === 'undefined') return '';
     return window.location.href;
+}
+
+function isRovalraAuthEndpoint(options) {
+    return (
+        options.isRovalraApi === true &&
+        options.subdomain === 'apis' &&
+        typeof options.endpoint === 'string' &&
+        options.endpoint.startsWith('/v1/auth/')
+    );
+}
+
+function getResponseCacheTtl(options) {
+    if (
+        !options.isRovalraApi ||
+        options.subdomain !== 'apis' ||
+        (options.method || 'GET').toUpperCase() !== 'GET'
+    ) {
+        return 0;
+    }
+
+    if (/^\/v1\/users\/[^/]+\/badges(?:\?|$)/.test(options.endpoint)) {
+        return USER_BADGES_CACHE_TTL_MS;
+    }
+
+    return 0;
 }
 
 function parseGameJoinV2Flag(data) {
@@ -409,6 +436,19 @@ export async function callRobloxApi(options) {
     const requestKey = getRequestKey(options);
 
     const shouldCache = !options.noCache && options.subdomain !== 'gamejoin';
+    const responseCacheTtl = getResponseCacheTtl(options);
+
+    if (responseCacheTtl) {
+        const cached = responseCache.get(requestKey);
+        if (cached && Date.now() - cached.timestamp < responseCacheTtl) {
+            return cached.response.clone();
+        }
+        if (cached) responseCache.delete(requestKey);
+    }
+
+    if (isRovalraAuthEndpoint(options) && options.noCache) {
+        options = { ...options, noCache: false };
+    }
 
     if (shouldCache && activeRequests.has(requestKey)) {
         const originalResponse = await activeRequests.get(requestKey);
@@ -432,7 +472,6 @@ export async function callRobloxApi(options) {
             useApiKey = false,
             noCache = false,
             responseType = 'text',
-            retryOnTransientStatus = true,
             suppressErrorLog = false,
         } = options;
 
@@ -612,154 +651,106 @@ export async function callRobloxApi(options) {
 
         if (isRovalraApi) {
             let lastResponse;
-            let authRetried = false;
-            let attemptsMade = 0;
-            for (let attempt = 0; attempt < 4; attempt++) {
-                attemptsMade = attempt + 1;
+            try {
+                lastResponse = await fetchInBackground(
+                    fullUrl,
+                    fetchOptions,
+                    responseType,
+                );
+                let newAccessToken = null;
                 try {
-                    lastResponse = await fetchInBackground(
-                        fullUrl,
-                        fetchOptions,
-                        responseType,
-                    );
-                    let newAccessToken = null;
+                    const bodyClone = await lastResponse.clone().json();
+                    if (bodyClone?.accessToken) {
+                        newAccessToken = bodyClone.accessToken;
+                    }
+                } catch {}
+
+                if (newAccessToken) {
                     try {
-                        const bodyClone = await lastResponse.clone().json();
-                        if (bodyClone && bodyClone.accessToken) {
-                            newAccessToken = bodyClone.accessToken;
-                        }
-                    } catch (e) {}
+                        const authedUserId = await getAuthenticatedUserId();
+                        if (authedUserId) {
+                            const storage =
+                                await chrome.storage.local.get(
+                                    OAUTH_STORAGE_KEY,
+                                );
+                            const allVerifications =
+                                storage[OAUTH_STORAGE_KEY] || {};
+                            const storedVerification =
+                                allVerifications[authedUserId];
 
-                    if (newAccessToken) {
-                        try {
-                            const authedUserId = await getAuthenticatedUserId();
-                            if (authedUserId) {
-                                const storage =
-                                    await chrome.storage.local.get(
-                                        OAUTH_STORAGE_KEY,
-                                    );
-                                let allVerifications =
-                                    storage[OAUTH_STORAGE_KEY] || {};
-                                let storedVerification =
-                                    allVerifications[authedUserId];
-
-                                if (storedVerification) {
-                                    console.log(
-                                        'RoValra API: New token detected in body. Updating storage.',
-                                    );
-                                    storedVerification.accessToken =
-                                        newAccessToken;
-                                    storedVerification.timestamp = Date.now();
-
-                                    try {
-                                        const data = await lastResponse
-                                            .clone()
-                                            .json();
-                                    } catch {}
-
-                                    allVerifications[authedUserId] =
-                                        storedVerification;
-                                    await chrome.storage.local.set({
-                                        [OAUTH_STORAGE_KEY]: allVerifications,
-                                    });
-                                }
-                            }
-                        } catch (e) {
-                            console.error(
-                                'RoValra API: Failed to update new access token.',
-                                e,
-                            );
-                        }
-                    }
-
-                    let isTokenInvalid = lastResponse.status === 401;
-                    let bodyIsInvalid = false;
-
-                    if (
-                        lastResponse.ok &&
-                        endpoint &&
-                        endpoint.includes('/v1/auth') &&
-                        !skipAutoAuth
-                    ) {
-                        const clonedForBodyCheck = lastResponse.clone();
-                        try {
-                            const bodyJson = await clonedForBodyCheck.json();
-                            if (
-                                bodyJson.status === 'error' &&
-                                (bodyJson.message ===
-                                    'Invalid or obsolete token.' ||
-                                    bodyJson.message ===
-                                        'Invalid or obsolete session.')
-                            ) {
-                                isTokenInvalid = true;
-                                bodyIsInvalid = true;
+                            if (storedVerification) {
                                 console.log(
-                                    'RoValra API: Invalid token/session from response body detected.',
+                                    'RoValra API: New token detected in body. Updating storage.',
                                 );
-                            }
-                        } catch (e) {}
-                    }
-
-                    if (
-                        isTokenInvalid &&
-                        endpoint &&
-                        endpoint.includes('/v1/auth') &&
-                        !skipAutoAuth
-                    ) {
-                        if (!authRetried) {
-                            console.log(
-                                'RoValra API: Invalid token/session, attempting token refresh...',
-                            );
-                            authRetried = true;
-                            const newToken = await getValidAccessToken(
-                                true,
-                                false,
-                            );
-                            if (newToken) {
-                                fetchOptions.headers.set(
-                                    'Authorization',
-                                    `Bearer ${newToken}`,
-                                );
-                                continue;
+                                storedVerification.accessToken = newAccessToken;
+                                storedVerification.timestamp = Date.now();
+                                allVerifications[authedUserId] =
+                                    storedVerification;
+                                await chrome.storage.local.set({
+                                    [OAUTH_STORAGE_KEY]: allVerifications,
+                                });
                             }
                         }
-
-                        console.warn(
-                            'RoValra API: Authentication failed repeatedly. Clearing storage as last resort.',
+                    } catch (error) {
+                        console.error(
+                            'RoValra API: Failed to update new access token.',
+                            error,
                         );
-                        await chrome.storage.local.remove(OAUTH_STORAGE_KEY);
-                        break;
                     }
+                }
 
-                    if (lastResponse.ok && !bodyIsInvalid) {
-                        return lastResponse;
-                    }
+                let isTokenInvalid = lastResponse.status === 401;
+                let bodyIsInvalid = false;
 
-                    if (!retryOnTransientStatus) break;
-
-                    if (endpoint && endpoint.includes('/v1/auth')) break;
-                } catch (error) {
-                    if (
-                        !retryOnTransientStatus ||
-                        attempt === 3 ||
-                        (endpoint && endpoint.includes('/v1/auth'))
-                    ) {
-                        if (!suppressErrorLog) {
-                            console.error(
-                                `RoValra API: Request to ${fullUrl} failed${attemptsMade > 1 ? ' after multiple attempts' : ''}.`,
-                                error,
+                if (
+                    lastResponse.ok &&
+                    endpoint?.includes('/v1/auth') &&
+                    !skipAutoAuth
+                ) {
+                    try {
+                        const bodyJson = await lastResponse.clone().json();
+                        if (
+                            bodyJson.status === 'error' &&
+                            (bodyJson.message ===
+                                'Invalid or obsolete token.' ||
+                                bodyJson.message ===
+                                    'Invalid or obsolete session.')
+                        ) {
+                            isTokenInvalid = true;
+                            bodyIsInvalid = true;
+                            console.log(
+                                'RoValra API: Invalid token/session from response body detected.',
                             );
                         }
-                        throw error;
-                    }
+                    } catch {}
                 }
-                if (attempt < 3) {
-                    await new Promise((res) => setTimeout(res, 1000));
+
+                if (
+                    isTokenInvalid &&
+                    endpoint?.includes('/v1/auth') &&
+                    !skipAutoAuth
+                ) {
+                    console.warn(
+                        'RoValra API: Authentication failed. Clearing stored authentication.',
+                    );
+                    await chrome.storage.local.remove(OAUTH_STORAGE_KEY);
                 }
+
+                if (lastResponse.ok && !bodyIsInvalid) {
+                    return lastResponse;
+                }
+            } catch (error) {
+                if (!suppressErrorLog) {
+                    console.error(
+                        `RoValra API: Request to ${fullUrl} failed without retrying.`,
+                        error,
+                    );
+                }
+                throw error;
             }
             if (!lastResponse.ok && !suppressErrorLog) {
                 console.error(
-                    `RoValra API: Request to ${fullUrl} failed with status ${lastResponse.status}${attemptsMade > 1 ? ' after multiple attempts' : ''}.`,
+                    `RoValra API: Request to ${fullUrl} failed with status ${lastResponse.status}.`,
                 );
             }
             return lastResponse;
@@ -877,6 +868,13 @@ export async function callRobloxApi(options) {
             if (useApiKey && response.status === 401) {
                 await invalidateApiKey();
             }
+        }
+
+        if (responseCacheTtl && response.ok) {
+            responseCache.set(requestKey, {
+                timestamp: Date.now(),
+                response: response.clone(),
+            });
         }
 
         return response;

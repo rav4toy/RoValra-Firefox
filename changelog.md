@@ -1,3 +1,10 @@
+2.6.7.31 Firefox 26/08/2026
+  # Changes :
+
+* hi bye  
+
+
+
 2.6.1.1 Firefox 23/07/2026
 
 &#x20; # Changes :
@@ -5,7 +12,7 @@
 * Updated to RoValra 2.6.1(not to confuse with my previous version)
 * Added my own changelogs that are here into the changelogs page in the extension.
 
-&#x20; 
+&#x20;
 
 &#x20;  # Fixes :
 

@@ -1,9 +1,12 @@
 @use 'features/profile/avatar_border.scss';
+@use 'features/profile/profile_frame.scss';
+@use 'features/profile/improved_avatar_card.scss';
 @use 'features/profile/item_checker.scss';
 @use 'features/profile/private_server.scss';
 @use 'features/profile/hidden_games.scss';
 @use 'features/profile/pronouns.scss';
 @use 'features/profile/profile_notes.scss';
+@use 'features/profile/showcase.scss';
 @use 'features/transactions/totalx.scss';
 @use 'components/game_card.scss';
 @use 'components/overlay.scss';
@@ -16,6 +19,7 @@
 @use 'components/gamelaunchmodal.scss';
 @use 'components/markdown.scss';
 @use 'components/selects.scss';
+@use 'components/builder_icons.scss';
 @use 'features/profile/header/rap.scss';
 @use 'features/profile/header/subplace_card.scss';
 @use 'features/games/tab/subplaces.scss';
@@ -27,10 +31,13 @@
 @use 'features/games/badgeLayoutToggle.scss';
 @use 'features/groups/antibots.scss';
 @use 'features/home/homeLayout.scss';
+@use 'features/home/friendLabels.scss';
 @use 'features/home/customThemeEditor.scss';
+@use 'features/sitewide/backgroundImage.scss';
 @use 'features/home/hideAddFriendsButton.scss';
 @use 'features/sitewide/friendGameLink.scss';
-@use 'features/themes/themeCatalogPage.scss';
+@use 'features/sitewide/friendUsernames.scss';
+@use 'features/sitewide/wideGameTileStats.scss';
 @use 'components/region_filters.scss';
 @use 'features/catalog/depenencies.scss';
 @use 'features/catalog/explorer.scss';
@@ -40,3 +47,4 @@
 @use 'features/sitewide/less_plus.scss';
 @use 'features/sitewide/kids_theme_text.scss';
 @use 'features/plus/sendRobux.scss';
+@use 'features/sitewide/viewid.scss';

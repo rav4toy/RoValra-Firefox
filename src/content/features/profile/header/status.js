@@ -16,7 +16,6 @@ import { ensureTouAgreement } from '../../../core/ui/tou/touAgreement.js';
 import { parseUntrustedMarkdown } from '../../../core/utils/markdown.js';
 import { migrateLegacyStatus } from '../../../core/profile/descriptionhandler.js';
 import DOMPurify from 'dompurify';
-import { TRUSTED_USER_IDS } from '../../../core/configs/userIds.js';
 import {
     getUserCardContext,
     onUserCardElement,
@@ -28,9 +27,69 @@ const REPORTING_ENABLED = false;
 let activeHomeStatusBubble = null;
 const homeStatusControllers = new WeakMap();
 
+const statusUrlPattern = /\b(?:https?:\/\/|www\.)[^\s<]+/gi;
+const trailingUrlPunctuationPattern = /[.,!?;:)\]}]+$/;
+
+function linkifyStatusContent(container) {
+    const walker = document.createTreeWalker(
+        container,
+        NodeFilter.SHOW_TEXT,
+        {
+            acceptNode: (node) =>
+                node.parentElement?.closest('a, code')
+                    ? NodeFilter.FILTER_REJECT
+                    : NodeFilter.FILTER_ACCEPT,
+        },
+    );
+    const textNodes = [];
+    let node;
+
+    while ((node = walker.nextNode())) textNodes.push(node);
+
+    for (const textNode of textNodes) {
+        const text = textNode.nodeValue;
+        let lastIndex = 0;
+        let match;
+        const fragment = document.createDocumentFragment();
+
+        statusUrlPattern.lastIndex = 0;
+        while ((match = statusUrlPattern.exec(text))) {
+            let urlText = match[0];
+            const trailingPunctuation = urlText.match(
+                trailingUrlPunctuationPattern,
+            )?.[0] || '';
+            if (trailingPunctuation) {
+                urlText = urlText.slice(0, -trailingPunctuation.length);
+            }
+
+            if (!urlText) continue;
+
+            fragment.append(text.slice(lastIndex, match.index));
+            const link = document.createElement('a');
+            link.href = urlText.startsWith('www.')
+                ? `https://${urlText}`
+                : urlText;
+            link.textContent = urlText;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.style.textDecoration = 'underline';
+            link.addEventListener('click', (event) =>
+                event.stopPropagation(),
+            );
+            fragment.append(link, trailingPunctuation);
+            lastIndex = match.index + match[0].length;
+        }
+
+        if (lastIndex === 0) continue;
+        fragment.append(text.slice(lastIndex));
+        textNode.replaceWith(fragment);
+    }
+}
+
 function renderStatusBubbleContent(bubble, statusText) {
     const html = parseUntrustedMarkdown(statusText);
     bubble.innerHTML = html; // Verified
+    linkifyStatusContent(bubble);
 }
 
 function cleanupStatusElements(container) {
@@ -91,19 +150,13 @@ DOMPurify.addHook('afterSanitizeAttributes', (currentNode) => {
     }
 });
 
-function createStatusHelpText(isTrusted) {
+function createStatusHelpText() {
     const helpText = document.createElement('p');
     helpText.className = 'text-description';
     Object.assign(helpText.style, {
         fontSize: '12px',
         lineHeight: '1.4',
     });
-
-    if (isTrusted) {
-        helpText.textContent =
-            "As a trusted RoValra user, your status bypasses the normal status filters. Do not add swears or anything against Roblox's ToS or RoValra's ToS. Links to your own stuff are allowed but don't link anything discord, youtube, x, etc pretty much don't link any social platforms..";
-        return helpText;
-    }
 
     helpText.append(
         "You must follow Roblox's ToS and RoValra's ToS when using status bubbles. If you break these rules, your status may be reset and your status privileges may be revoked.",
@@ -122,7 +175,7 @@ function createStatusHelpText(isTrusted) {
     return helpText;
 }
 
-function openEditStatusOverlay(currentStatus, onSave, isTrusted) {
+function openEditStatusOverlay(currentStatus, onSave) {
     const container = document.createElement('div');
     Object.assign(container.style, {
         display: 'flex',
@@ -143,7 +196,7 @@ function openEditStatusOverlay(currentStatus, onSave, isTrusted) {
 
     container.appendChild(inputContainer);
 
-    container.appendChild(createStatusHelpText(isTrusted));
+    container.appendChild(createStatusHelpText());
 
     const errorDisplay = document.createElement('p');
     errorDisplay.className = 'text-error';
@@ -205,8 +258,6 @@ async function addStatusBubble(avatarContainer) {
 
         const userId = getUserIdFromUrl();
         if (!userId) return;
-        const isTrusted = TRUSTED_USER_IDS.has(String(userId));
-
         const authenticatedUserId = await getAuthenticatedUserId();
         const isOwnProfile =
             authenticatedUserId &&
@@ -300,7 +351,6 @@ async function addStatusBubble(avatarContainer) {
                                 return false;
                             }
                         },
-                        isTrusted,
                     );
                 });
             });

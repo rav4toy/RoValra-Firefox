@@ -4,6 +4,7 @@
     const documentEvents = [
         'rovalra-group-roles-response',
         'rovalra-home-layout-categories',
+        'rovalra:user-settings-response',
         'rovalra-catalog-details-response',
         'rovalra-client-status-response',
         'rovalra-game-launch-success',
@@ -15,6 +16,7 @@
     ];
     const windowEvents = [
         'rovalra-catalog-details',
+        'rovalra-profile-platform-response',
         'rovalra-serverid-extracted',
     ];
 

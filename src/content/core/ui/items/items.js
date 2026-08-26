@@ -5,10 +5,51 @@ import {
 import { addTooltip } from '../tooltip.js';
 import { createSerialIcon } from './serials.js';
 import { callRobloxApi } from '../../api.js';
+import { getAssets } from '../../assets.js';
+import { t } from '../../locale/i18n.js';
 
 let batchQueue = [];
 let batchTimeout = null;
 const BATCH_DELAY = 50;
+const DEVELOP_ASSET_BATCH_SIZE = 50;
+
+async function fetchDevelopAssetDetails(assetIds) {
+    const assetMap = new Map();
+
+    await Promise.all(
+        Array.from(
+            { length: Math.ceil(assetIds.length / DEVELOP_ASSET_BATCH_SIZE) },
+            (_, index) => {
+                const batch = assetIds.slice(
+                    index * DEVELOP_ASSET_BATCH_SIZE,
+                    (index + 1) * DEVELOP_ASSET_BATCH_SIZE,
+                );
+
+                return callRobloxApi({
+                    subdomain: 'develop',
+                    endpoint: `/v1/assets?assetIds=${batch.join(',')}`,
+                    method: 'GET',
+                })
+                    .then(async (developRes) => {
+                        if (!developRes.ok) return;
+
+                        const developData = await developRes.json();
+                        developData.data?.forEach((assetInfo) => {
+                            assetMap.set(assetInfo.id, assetInfo);
+                        });
+                    })
+                    .catch((e) => {
+                        console.warn(
+                            'RoValra: Develop fallback batch failed',
+                            e,
+                        );
+                    });
+            },
+        ),
+    );
+
+    return assetMap;
+}
 
 function getCollectibleLowestResalePrice(data) {
     const resalePrice =
@@ -45,6 +86,16 @@ function isItemOffSale(data) {
         data?.noPriceStatus === 'OffSale' ||
         data?.priceStatus === 'Off Sale' ||
         data?.isPurchasable === false
+    );
+}
+
+function isFAEItem(item) {
+    return (
+        item?.isFAE === true ||
+        (Array.isArray(item?.itemStatus) &&
+            item.itemStatus.some((status) =>
+                ['IsFAE', 'IsFae'].includes(status),
+            ))
     );
 }
 
@@ -96,6 +147,7 @@ async function fetchEconomyItemDetails(
             name: data.Name || catalogItemData?.name || 'Unknown Item',
             recentAveragePrice: rawPrice || 0,
             itemRestrictions: restrictions,
+            isFAE: isFAEItem(catalogItemData),
             itemType: catalogItemData?.itemType || 'Asset',
             isOnHold: false,
             bundleId: null,
@@ -148,15 +200,30 @@ async function processBatch() {
                 });
             }
         });
-        const thumbnailIdsToFetch = ids.filter(
-            (id) => !prefetchedThumbMap.has(id),
+        const thumbnailRequests = currentBatch.filter(
+            (request) => !prefetchedThumbMap.has(request.id),
         );
+        const thumbnailGroups = new Map();
+        thumbnailRequests.forEach((request) => {
+            const itemType =
+                request.config?.itemType === 'Bundle'
+                    ? 'BundleThumbnail'
+                    : 'Asset';
+            if (!thumbnailGroups.has(itemType))
+                thumbnailGroups.set(itemType, []);
+            thumbnailGroups.get(itemType).push(request.id);
+        });
         const [detailsRes, looksRes, thumbMap] = await Promise.all([
             callRobloxApi({
                 subdomain: 'catalog',
                 endpoint: `/v1/catalog/items/details`,
                 method: 'POST',
-                body: { items: ids.map((id) => ({ itemType: 'Asset', id })) },
+                body: {
+                    items: currentBatch.map((request) => ({
+                        itemType: request.config?.itemType || 'Asset',
+                        id: request.id,
+                    })),
+                },
             }),
             callRobloxApi({
                 subdomain: 'apis',
@@ -164,13 +231,22 @@ async function processBatch() {
                 method: 'POST',
                 body: { assets: ids.map((id) => ({ id })) },
             }),
-            thumbnailIdsToFetch.length > 0
-                ? fetchThumbnails(
-                      thumbnailIdsToFetch.map((id) => ({ id })),
-                      'Asset',
-                      '150x150',
-                  )
-                : Promise.resolve(new Map()),
+            Promise.all(
+                Array.from(thumbnailGroups.entries()).map(
+                    ([itemType, thumbnailIds]) =>
+                        fetchThumbnails(
+                            thumbnailIds.map((id) => ({ id })),
+                            itemType,
+                            '150x150',
+                        ),
+                ),
+            ).then((maps) => {
+                const merged = new Map();
+                maps.forEach((map) =>
+                    map.forEach((thumbnail, id) => merged.set(id, thumbnail)),
+                );
+                return merged;
+            }),
         ]);
 
         prefetchedThumbMap.forEach((thumbData, id) => {
@@ -209,6 +285,16 @@ async function processBatch() {
                 }
             });
         });
+
+        const developAssetMap = await fetchDevelopAssetDetails(
+            [
+                ...new Set(
+                    currentBatch
+                        .filter((request) => !catalogDetailsMap.has(request.id))
+                        .map((request) => request.id),
+                ),
+            ],
+        );
 
         await Promise.all(
             currentBatch.map(async (request) => {
@@ -279,8 +365,11 @@ async function processBatch() {
                     const item = {
                         assetId: request.id,
                         name: catalogItemData.name,
+                        isHiddenFromMarketplace:
+                            catalogItemData.isHiddenFromMarketplace === true,
                         recentAveragePrice: rawPrice || 0,
                         itemRestrictions: restrictions,
+                        isFAE: isFAEItem(catalogItemData),
                         itemType: catalogItemData.itemType,
                         isOnHold: false,
                         bundleId: null,
@@ -321,44 +410,47 @@ async function processBatch() {
                     );
 
                     if (!item) {
-                        try {
-                            const developRes = await callRobloxApi({
-                                subdomain: 'develop',
-                                endpoint: `/v1/assets?assetIds=${request.id}`,
-                                method: 'GET',
-                            });
-
-                            if (developRes.ok) {
-                                const devData = await developRes.json();
-                                const assetInfo = devData.data?.[0];
-                                if (assetInfo) {
-                                    item = {
-                                        assetId: request.id,
-                                        name: assetInfo.name,
-                                        recentAveragePrice: 0,
-                                        itemRestrictions: [],
-                                        itemType: 'Asset',
-                                        isOnHold: false,
-                                        bundleId: null,
-                                        priceText: 'Off Sale',
-                                    };
-                                }
-                            }
-                        } catch (e) {
-                            console.warn(
-                                `RoValra: Develop fallback failed for item ${request.id}`,
-                                e,
-                            );
+                        const assetInfo = developAssetMap.get(request.id);
+                        if (assetInfo) {
+                            item = {
+                                assetId: request.id,
+                                name: assetInfo.name,
+                                assetType: {
+                                    id: assetInfo.typeId,
+                                    name: assetInfo.type,
+                                },
+                                recentAveragePrice: 0,
+                                itemRestrictions: [],
+                                itemType: 'Asset',
+                                isOnHold: false,
+                                bundleId: null,
+                                priceText: 'Off Sale',
+                            };
                         }
                     }
 
                     if (item) {
+                        item.isHiddenFromMarketplace = true;
                         const realCard = createItemCard(
                             item,
                             thumbMap,
                             request.config,
                         );
                         request.placeholder.replaceWith(realCard);
+                        if (item.assetType) {
+                            window.dispatchEvent(
+                                new CustomEvent('rovalra-catalog-details', {
+                                    detail: {
+                                        data: [
+                                            {
+                                                id: item.assetId,
+                                                assetType: item.assetType,
+                                            },
+                                        ],
+                                    },
+                                }),
+                            );
+                        }
                     } else {
                         request.placeholder.innerHTML =
                             '<div style="padding: 10px;">Not Found</div>';
@@ -469,6 +561,52 @@ export function createItemCard(itemOrId, thumbnailCacheOrConfig, config = {}) {
         'rovalra-item-thumb',
     );
 
+    if (item.isHiddenFromMarketplace === true) {
+        const hiddenIconElement = document.createElement('div');
+        hiddenIconElement.className = 'rovalra-hidden-marketplace-icon';
+        hiddenIconElement.setAttribute('aria-hidden', 'true');
+        const hiddenIconSvg = getAssets().visibilityOff;
+        if (hiddenIconSvg?.startsWith('data:image/svg+xml,')) {
+            hiddenIconElement.innerHTML = decodeURIComponent(
+                hiddenIconSvg.split(',')[1],
+            );
+            const svg = hiddenIconElement.querySelector('svg');
+            if (svg) {
+                svg.style.width = '100%';
+                svg.style.height = '100%';
+                svg.style.fill = 'currentColor';
+            }
+        }
+        Object.assign(hiddenIconElement.style, {
+            position: 'absolute',
+            right: '7px',
+            bottom: '7px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '25px',
+            height: '25px',
+            padding: '4px',
+            boxSizing: 'border-box',
+            borderRadius: '50%',
+            backgroundColor: 'rgba(127, 127, 127, 0.55)',
+            backdropFilter: 'blur(3px)',
+            webkitBackdropFilter: 'blur(3px)',
+            color: 'var(--rovalra-main-text-color)',
+            zIndex: '2',
+        });
+        t('items.hiddenFromMarketplace')
+            .catch(() => 'This item is hidden from the marketplace')
+            .then((tooltipText) => {
+                if (hiddenIconElement.isConnected) {
+                    addTooltip(hiddenIconElement, tooltipText, {
+                        position: 'top',
+                    });
+                }
+            });
+        thumbContainer.appendChild(hiddenIconElement);
+    }
+
     if (showOnHold && item.isOnHold) {
         const onHoldIconElement = document.createElement('div');
         onHoldIconElement.className = 'rovalra-on-hold-icon-container';
@@ -489,6 +627,29 @@ export function createItemCard(itemOrId, thumbnailCacheOrConfig, config = {}) {
     }
 
     thumbContainer.appendChild(thumbnailElement);
+
+    if (isFAEItem(item)) {
+        const faeIconElement = document.createElement('div');
+        faeIconElement.className = 'rovalra-fae-icon';
+        faeIconElement.setAttribute('aria-label', 'FAE item');
+        faeIconElement.innerHTML =
+            '<span role="presentation" class="grow-0 shrink-0 basis-auto icon icon-regular-lock-closed size-[var(--icon-size-medium)]"></span>';
+        Object.assign(faeIconElement.style, {
+            position: 'absolute',
+            top: '8px',
+            left: '8px',
+            zIndex: '3',
+            width: '32px',
+            height: '32px',
+            borderRadius: '9999px',
+            backgroundColor: 'var(--color-content-emphasis)',
+            color: 'var(--color-surface-100)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+        });
+        thumbContainer.appendChild(faeIconElement);
+    }
 
     let showLimitedIcon = false;
     let isUnique = false;

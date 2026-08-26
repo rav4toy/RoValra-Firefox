@@ -1,9 +1,5 @@
 import { getAssets } from '../../core/assets.js';
-import {
-    getRegionData,
-    loadDatacenterMap,
-    getFullRegionName,
-} from '../../core/regions.js';
+import { getRegionData, loadDatacenterMap } from '../../core/regions.js';
 import { observeElement, observeIntersection } from '../../core/observer.js';
 import { generateSingleSettingHTML } from '../../core/settings/generateSettings.js';
 import { SETTINGS_CONFIG } from '../../core/settings/settingConfig.js';
@@ -29,12 +25,15 @@ import {
     addPopoverButton,
 } from '../../core/settings/ui/settingsbutton.js';
 import { checkRoValraPage } from '../../core/settings/ui/page.js';
-import { callRobloxApi } from '../../core/api.js';
+import { callRobloxApi, callRobloxApiJson } from '../../core/api.js';
 import { safeHtml } from '../../core/packages/dompurify';
 import DOMPurify from 'dompurify';
 import { BADGE_CONFIG } from '../../core/configs/badges.js';
-import { ts } from '../../core/locale/i18n.js';
-import { CONTRIBUTOR_USER_IDS } from '../../core/configs/userIds.js';
+import { t, ts } from '../../core/locale/i18n.js';
+import {
+    CONTRIBUTOR_USER_IDS,
+    CREATOR_USER_ID,
+} from '../../core/configs/userIds.js';
 import { createOverlay } from '../../core/ui/overlay.js';
 import { createInteractiveTimestamp } from '../../core/ui/time/time.js';
 import { createStyledInput } from '../../core/ui/catalog/input.js';
@@ -55,6 +54,11 @@ import {
     updateUserSettingViaApi,
 } from '../../core/donators/settingHandler.js';
 import { getBorders, getCachedBorders } from '../../core/configs/borders.js';
+import {
+    getFrames,
+    findFrameByLink,
+    groupFramesByCategory,
+} from '../../core/configs/frames.js';
 import { createUserCard } from '../../core/ui/profile/userCard.js';
 import { createPill } from '../../core/ui/general/pill.js';
 import { createPillToggle } from '../../core/ui/general/pillToggle.js';
@@ -62,29 +66,46 @@ import {
     applyBorderToContainer,
     findInBorders,
 } from '../profile/avatarBorder.js';
+import { applyFrameToHolder } from '../profile/profileFrame.js';
 import {
     getUserDisplayName,
     getUserProfileData,
 } from '../../core/apis/users.js';
 import { showSystemAlert } from '../../core/ui/roblox/alert.js';
-import { isAuthenticatedUserUnder16OrNotAgeChecked } from '../../core/utils/trackers/birthday.js';
 import { createSquareButton } from '../../core/ui/profile/header/squarebutton.js';
 import {
     getActiveModeration,
     getModerationStatusLabel,
 } from '../../core/moderationStatus.js';
+import { showConfirmationPrompt } from '../../core/ui/confirmationPrompt.js';
+import { createSpinner } from '../../core/ui/spinner.js';
+import { createButton } from '../../core/ui/buttons.js';
 import {
     loadFirefoxChangelogReleases,
     sortChangelogReleasesByVersion,
 } from './changelogs.js';
+import { ChangeIcon, Icon } from '../../core/ui/buildericon.js';
+import { CUSTOM_ADDED_TAGS } from '../../core/utils/purifyCfg.js';
+import { OTHER_CONTRIBUTIONS } from '../../core/configs/otherContributions.js';
+import { getCatalogItemDetails } from '../../core/apis/catalog.js';
 
 const assets = getAssets();
+const CREDITS_USER_IDS = [
+    ...new Set([CREATOR_USER_ID, ...CONTRIBUTOR_USER_IDS]),
+];
 let REGIONS = {};
 
+const DONATOR_PERKS_UNIVERSE_ID = '9452973012';
 const DONATOR_PERKS_GAME_URL =
-    'https://www.roblox.com/games/store-section/9452973012';
+    'https://www.roblox.com/games/store-section/' + DONATOR_PERKS_UNIVERSE_ID;
 const DONATOR_PERKS_FALLBACK_ONSALE_URL =
-    'https://www.roblox.com/catalog?taxonomy=tZsUsd2BqGViQrJ9Vs3Wah&CreatorName=Valra&CreatorType=Group&salesTypeFilter=1';
+    'https://www.roblox.com/catalog?taxonomy=2a2rf9qyeTd8W5iegK2Prc&CreatorName=Valra&CreatorType=Group&salesTypeFilter=1';
+let requestedDonatorGameUnblock = false;
+let requestedDonatorGameUnblockChecked = false;
+let donatorGameUnblockConsentId = 0;
+let parentAttchedToAccount = false;
+let parentAttchedToAccountChecked = false;
+
 const CHANGELOGS_ENDPOINT = '/static/json/changelogs.json';
 
 const RESTRICTION_LEVELS = [
@@ -114,6 +135,7 @@ let ownedBordersCache = null;
 let changelogsCache = null;
 const priceCache = new Map();
 const artistCache = new Map();
+const frameAssetDetailsCache = new Map();
 
 document.addEventListener('rovalra:moderationStatusUpdated', (event) => {
     standingCache = event.detail?.data || null;
@@ -252,37 +274,289 @@ async function renderChangelogs(container) {
     }
 }
 
-async function getDonatorPerksDonationUrl(forceRefresh = false) {
+async function openDonatorPerksDonationUrl() {
+    let canPlayUniverse = false;
+    let canPlayUniverseReason = 'Unknown';
+    const btn = document.querySelector(
+        '#rovalra-donator-perks-donation-button',
+    );
+
+    btn.dataset.rovalraDonatorPerksDonationButtonLoading = true;
+
+    async function openPopup(url) {
+        try {
+            const popup = window.open('about:blank', '_blank');
+            if (popup) popup.opener = null;
+
+            if (popup) {
+                popup.location.href = url;
+            } else {
+                window.location.href = url;
+            }
+        } catch (error) {
+            console.warn('RoValra: Failed to open donation URL', error);
+            window.location.href = url;
+        }
+    }
+
+    async function overlayUnblockGame() {
+        const loadingOverlay = createOverlay({
+            title: 'Sending Request',
+            bodyContent: 'Please wait...',
+            showLogo: true,
+        });
+        try {
+            await callRobloxApiJson({
+                subdomain: 'apis',
+                endpoint: '/child-requests-api/v1/send-request-to-all-parents',
+                method: 'POST',
+                body: {
+                    requestType: 'ManageExperience',
+                    requestDetails: {
+                        universeId: String(DONATOR_PERKS_UNIVERSE_ID),
+                        experienceManagementAction: 'Approve',
+                    },
+                },
+            });
+
+            const universeDetailsRequest = await callRobloxApi({
+                subdomain: 'games',
+                endpoint: '/v1/games?universeIds=' + DONATOR_PERKS_UNIVERSE_ID,
+                method: 'GET',
+            });
+            const universeDetails = (await universeDetailsRequest.json())
+                .data[0];
+
+            loadingOverlay.close();
+
+            const requestSentOverlay = createOverlay({
+                title: 'Request Sent!',
+                bodyContent:
+                    'Your request was sent to your parents and guardians via email.' +
+                    (universeDetailsRequest.ok
+                        ? '<br />The experience name is: <b>' +
+                          DOMPurify.sanitize(universeDetails.name) +
+                          '</b>'
+                        : ''),
+                actions: [
+                    createButton('OK', 'secondary', {
+                        onClick: () => {
+                            requestSentOverlay.close();
+                        },
+                    }),
+                ],
+                showLogo: true,
+            });
+
+            requestedDonatorGameUnblockChecked = false;
+        } catch (error) {
+            console.warn('[RoValra Unblock Request] Error:', error);
+            loadingOverlay.close();
+            const requestFailedOverlay = createOverlay({
+                title: 'Request Failed to Send',
+                bodyContent:
+                    'Your request failed to send for an unknown reason. Maybe you have been ratelimited. Check console for more details.',
+                actions: [
+                    createButton('OK', 'secondary', {
+                        onClick: () => {
+                            requestFailedOverlay.close();
+                        },
+                    }),
+                ],
+                showLogo: true,
+            });
+        }
+        btn.dataset.rovalraDonatorPerksDonationButtonLoading = false;
+    }
+
+    async function overlayCancelRequest(
+        consentId = donatorGameUnblockConsentId,
+    ) {
+        btn.dataset.rovalraDonatorPerksDonationButtonLoading = true;
+        const loadingOverlay = createOverlay({
+            title: 'Canceling Request',
+            bodyContent: 'Please wait...',
+            showLogo: true,
+        });
+        try {
+            await callRobloxApiJson({
+                subdomain: 'apis',
+                endpoint: '/child-requests-api/v1/cancel-consent-request',
+                method: 'POST',
+                body: {
+                    consentId,
+                },
+            });
+
+            loadingOverlay.close();
+
+            const cancelRequestSentOverlay = createOverlay({
+                title: 'Canceled Request',
+                bodyContent:
+                    'Your request to your parents and guardians were canceled',
+                actions: [
+                    createButton('OK', 'secondary', {
+                        onClick: () => {
+                            cancelRequestSentOverlay.close();
+                        },
+                    }),
+                ],
+                showLogo: true,
+            });
+
+            requestedDonatorGameUnblockChecked = false;
+        } catch {
+            loadingOverlay.close();
+            const cancelRequestFailedOverlay = createOverlay({
+                title: 'Request Cancellation Failed',
+                bodyContent:
+                    'Cancellation for your unblock request failed. Maybe you have been ratelimited. Check console for more details.',
+                actions: [
+                    createButton('OK', 'secondary', {
+                        onClick: () => {
+                            cancelRequestFailedOverlay.close();
+                        },
+                    }),
+                ],
+                showLogo: true,
+            });
+        }
+        btn.dataset.rovalraDonatorPerksDonationButtonLoading = false;
+    }
+
     try {
-        if (await isAuthenticatedUserUnder16OrNotAgeChecked(forceRefresh)) {
-            return DONATOR_PERKS_FALLBACK_ONSALE_URL;
+        const canPlayUniverseRequest = (
+            await callRobloxApiJson({
+                subdomain: 'games',
+                endpoint:
+                    '/v1/games/multiget-playability-status?universeIds=' +
+                    DONATOR_PERKS_UNIVERSE_ID,
+                method: 'GET',
+            })
+        )[0];
+        canPlayUniverse = canPlayUniverseRequest.isPlayable;
+        canPlayUniverseReason = canPlayUniverseRequest.playabilityStatus;
+    } catch (error) {
+        console.warn(
+            'RoValra: Failed to get playability status of donation universe',
+            error,
+        );
+    }
+
+    try {
+        if (
+            !parentAttchedToAccountChecked &&
+            !parentAttchedToAccount &&
+            !canPlayUniverse &&
+            canPlayUniverseReason ==
+                'ContextualPlayabilityRequireParentApproval'
+        ) {
+            const approveExperienceRecourse = await callRobloxApiJson({
+                subdomain: 'apis',
+                endpoint:
+                    '/access-management/v1/upsell-feature-access?featureName=CanApproveExperience&extraParameters=W10=',
+                method: 'GET',
+            });
+            parentAttchedToAccountChecked = true;
+            parentAttchedToAccount =
+                approveExperienceRecourse.recourse.includes('ParentConsent');
         }
     } catch (error) {
         console.warn(
-            'RoValra: Failed to check donator perks donation eligibility',
+            'RoValra: Failed to see if there were any parents linked to account for game unblock overlay',
             error,
         );
-        return DONATOR_PERKS_FALLBACK_ONSALE_URL;
     }
 
-    return DONATOR_PERKS_GAME_URL;
-}
-
-async function openDonatorPerksDonationUrl() {
     try {
-        const popup = window.open('about:blank', '_blank');
-        if (popup) popup.opener = null;
+        if (parentAttchedToAccount && !requestedDonatorGameUnblockChecked) {
+            const consentsPending = await callRobloxApiJson({
+                subdomain: 'apis',
+                endpoint:
+                    '/parental-controls-api/v1/parental-controls/consents?consentStatus=Pending&childUserId=' +
+                    (await getAuthenticatedUserId()),
+                method: 'GET',
+            });
 
-        const url = await getDonatorPerksDonationUrl(true);
+            requestedDonatorGameUnblock = consentsPending.consents.some(
+                (consent) =>
+                    consent.consentType === 'ManageExperience' &&
+                    consent.consentData.experienceManagementAction ===
+                        'Approve' &&
+                    consent.consentData.universeId ===
+                        String(DONATOR_PERKS_UNIVERSE_ID),
+            );
 
-        if (popup) {
-            popup.location.href = url;
-        } else {
-            window.location.href = url;
+            requestedDonatorGameUnblockChecked = true;
+
+            if (requestedDonatorGameUnblock) {
+                donatorGameUnblockConsentId = consentsPending.consents.find(
+                    (consent) =>
+                        consent.consentType === 'ManageExperience' &&
+                        consent.consentData.experienceManagementAction ===
+                            'Approve' &&
+                        consent.consentData.universeId ===
+                            String(DONATOR_PERKS_UNIVERSE_ID),
+                ).id;
+            } else donatorGameUnblockConsentId = 0;
         }
     } catch (error) {
-        console.warn('RoValra: Failed to open donation URL', error);
-        window.location.href = DONATOR_PERKS_FALLBACK_ONSALE_URL;
+        console.warn('RoValra: Failed to get parent requests of a user', error);
+    }
+
+    if (
+        canPlayUniverse == false &&
+        canPlayUniverseReason == 'ContextualPlayabilityRequireParentApproval' &&
+        parentAttchedToAccount
+    ) {
+        showConfirmationPrompt({
+            title: 'Help Support RoValra More!',
+            message:
+                'RoValra gets more of the donation cut when using gamepasses. We see you have at least 1 parent account linked. You can request to unblock the experience so RoValra gets a better cut versus using 2D (and 3D) clothing.',
+            confirmText: 'Send Unblock Request',
+            confirmType: 'primary',
+            cancelText: 'Use Marketplace',
+            cancelType: 'secondary',
+            onConfirm: !requestedDonatorGameUnblock
+                ? overlayUnblockGame
+                : () => {
+                      btn.dataset.rovalraDonatorPerksDonationButtonLoading = false;
+                      const alreadyRequestedOverlay = createOverlay({
+                          title: 'Already Requested',
+                          bodyContent:
+                              'You already requested the experience silly!',
+                          actions: [
+                              createButton('Cancel', 'alert', {
+                                  onClick: () => {
+                                      alreadyRequestedOverlay.close();
+                                      overlayCancelRequest();
+                                  },
+                              }),
+                              createButton('Okay', 'primary', {
+                                  onClick: () => {
+                                      alreadyRequestedOverlay.close();
+                                  },
+                              }),
+                          ],
+                          showLogo: true,
+                      });
+                  },
+            onCancel: () => {
+                btn.dataset.rovalraDonatorPerksDonationButtonLoading = false;
+                openPopup(DONATOR_PERKS_FALLBACK_ONSALE_URL);
+            },
+            onCloseBtn: () => {
+                btn.dataset.rovalraDonatorPerksDonationButtonLoading = false;
+            },
+            closeBtnCallsCancel: false,
+        });
+    } else {
+        btn.dataset.rovalraDonatorPerksDonationButtonLoading = false;
+        openPopup(
+            canPlayUniverse
+                ? DONATOR_PERKS_GAME_URL
+                : DONATOR_PERKS_FALLBACK_ONSALE_URL,
+        );
     }
 }
 
@@ -293,10 +567,17 @@ function renderDonatorPerksDonationButton(container = document) {
     if (!holder || holder.dataset.rovalraDonationButtonRendered === 'true')
         return;
 
+    const spinner = createSpinner({
+        className: 'rovalra-donator-perks-donation-btn-spinner',
+    });
+    const text = document.createElement('span');
+    text.classList.add('rovalra-donator-perks-donation-btn-content');
+    text.textContent = 'Donate';
+
     holder.dataset.rovalraDonationButtonRendered = 'true';
     holder.replaceChildren(
         createSquareButton({
-            content: 'Donate',
+            content: [text, spinner],
             id: 'rovalra-donator-perks-donation-button',
             onClick: openDonatorPerksDonationUrl,
             width: 'auto',
@@ -346,19 +627,58 @@ function getLevenshteinDistance(a, b) {
 async function getOwnedBorders() {
     if (ownedBordersCache) return ownedBordersCache;
     try {
-        const response = await callRobloxApi({
-            subdomain: 'apis',
-            endpoint: '/v1/auth/borders',
-            method: 'GET',
-            isRovalraApi: true,
-        });
+        const [bordersResponse, bertsResponse] = await Promise.all([
+            callRobloxApi({
+                subdomain: 'apis',
+                endpoint: '/v1/auth/borders',
+                method: 'GET',
+                isRovalraApi: true,
+            }),
+            callRobloxApi({
+                subdomain: 'apis',
+                endpoint: '/v1/auth/berts',
+                method: 'GET',
+                isRovalraApi: true,
+            }),
+        ]);
 
-        if (response.ok) {
-            const data = await response.json();
+        const borderData = bordersResponse.ok
+            ? await bordersResponse.json()
+            : {};
+        const bertsData = bertsResponse.ok ? await bertsResponse.json() : {};
+
+        if (bordersResponse.ok || bertsResponse.ok) {
+            const configuredFrames = await getFrames();
+            const ownedFrames = new Set();
+
+            for (const bert of bertsData.owned_berts || []) {
+                const value =
+                    bert && typeof bert === 'object' ? bert.value : bert;
+                const link =
+                    bert && typeof bert === 'object' ? bert.link : bert;
+                const frame = configuredFrames.find(
+                    (candidate) =>
+                        candidate.value === String(value ?? '').trim() ||
+                        candidate.link === String(link ?? '').trim(),
+                );
+
+                if (value !== null && value !== undefined) {
+                    ownedFrames.add(String(value).trim());
+                }
+                if (link !== null && link !== undefined) {
+                    ownedFrames.add(String(link).trim());
+                }
+                if (frame) {
+                    ownedFrames.add(frame.value);
+                    ownedFrames.add(frame.link);
+                }
+            }
+
             ownedBordersCache = {
-                borders: new Set(data.owned_borders || []),
+                borders: new Set(borderData.owned_borders || []),
+                frames: ownedFrames,
                 gamepasses: new Set(
-                    (data.owned_gamepasses || []).map((id) => String(id)),
+                    (borderData.owned_gamepasses || []).map((id) => String(id)),
                 ),
             };
             return ownedBordersCache;
@@ -366,7 +686,7 @@ async function getOwnedBorders() {
     } catch (e) {
         console.warn('RoValra: Failed to fetch owned borders', e);
     }
-    return { borders: new Set(), gamepasses: new Set() };
+    return { borders: new Set(), frames: new Set(), gamepasses: new Set() };
 }
 
 async function getGamePassPrice(id) {
@@ -407,6 +727,40 @@ function isBorderOwned({ value, gamepassId, ownedData, tier }) {
     if (!hasBorderGamepassId(gamepassId)) return true;
     if (ownedData.borders.has(value)) return true;
     return ownedData.gamepasses.has(String(gamepassId));
+}
+
+// No tier check on purpose: Donator Tier 3 unlocks avatar borders, not frames.
+function isFrameOwned({ frame, ownedData }) {
+    if (frame.isFree) return true;
+    return (
+        ownedData.frames?.has(frame.value) ||
+        ownedData.frames?.has(frame.link) ||
+        false
+    );
+}
+
+async function getFrameAssetDetails(frame) {
+    if (!frame?.assetId) return null;
+
+    const assetId = String(frame.assetId);
+    if (!frameAssetDetailsCache.has(assetId)) {
+        frameAssetDetailsCache.set(
+            assetId,
+            getCatalogItemDetails(assetId, 'Asset').catch(() => null),
+        );
+    }
+
+    return frameAssetDetailsCache.get(assetId);
+}
+
+function getFrameAssetUrl(frame) {
+    if (!frame?.assetId) return null;
+    return `https://www.roblox.com/catalog/${encodeURIComponent(frame.assetId)}/${encodeURIComponent(frame.label || 'item')}`;
+}
+
+function getFrameAssetPrice(frame, details) {
+    const price = details?.price ?? details?.lowestPrice ?? frame?.price;
+    return typeof price === 'number' ? price : Number(price) || null;
 }
 
 function createArtistCreditSection(artistId) {
@@ -494,6 +848,287 @@ function createArtistCreditSection(artistId) {
     contributorsWrapper.appendChild(artistPill);
     artistWrapper.append(artistLabel, contributorsWrapper);
     return artistWrapper;
+}
+
+
+async function openAvatarBorderUrl(gamepassId) {
+    let canPlayUniverse = false;
+    let canPlayUniverseReason = 'Unknown';
+
+    async function openPopup(url) {
+        try {
+            const popup = window.open('about:blank', '_blank');
+            if (popup) popup.opener = null;
+
+            if (popup) {
+                popup.location.href = url;
+            } else {
+                window.location.href = url;
+            }
+        } catch (error) {
+            console.warn('RoValra: Failed to open gamepass URL', error);
+            window.location.href = url;
+        }
+    }
+
+    async function overlayUnblockGame() {
+        const loadingOverlay = createOverlay({
+            title: 'Sending Request',
+            bodyContent: 'Please wait...',
+            showLogo: true,
+        });
+        try {
+            await callRobloxApiJson({
+                subdomain: 'apis',
+                endpoint: '/child-requests-api/v1/send-request-to-all-parents',
+                method: 'POST',
+                body: {
+                    requestType: 'ManageExperience',
+                    requestDetails: {
+                        universeId: String(DONATOR_PERKS_UNIVERSE_ID),
+                        experienceManagementAction: 'Approve',
+                    },
+                },
+            });
+
+            const universeDetailsRequest = await callRobloxApi({
+                subdomain: 'games',
+                endpoint: '/v1/games?universeIds=' + DONATOR_PERKS_UNIVERSE_ID,
+                method: 'GET',
+            });
+            const universeDetails = (await universeDetailsRequest.json())
+                .data[0];
+
+            loadingOverlay.close();
+
+            const requestSentOverlay = createOverlay({
+                title: 'Request Sent!',
+                bodyContent:
+                    'Your request was sent to your parents and guardians via email.' +
+                    (universeDetailsRequest.ok
+                        ? '<br />The experience name is: <b>' +
+                          DOMPurify.sanitize(universeDetails.name) +
+                          '</b>'
+                        : ''),
+                actions: [
+                    createButton('OK', 'secondary', {
+                        onClick: () => {
+                            requestSentOverlay.close();
+                        },
+                    }),
+                ],
+                showLogo: true,
+            });
+
+            requestedDonatorGameUnblockChecked = false;
+        } catch (error) {
+            console.warn('[RoValra Unblock Request] Error:', error);
+            loadingOverlay.close();
+            const requestFailedOverlay = createOverlay({
+                title: 'Request Failed to Send',
+                bodyContent:
+                    'Your request failed to send for an unknown reason. Maybe you have been ratelimited. Check console for more details.',
+                actions: [
+                    createButton('OK', 'secondary', {
+                        onClick: () => {
+                            requestFailedOverlay.close();
+                        },
+                    }),
+                ],
+                showLogo: true,
+            });
+        }
+    }
+
+    async function overlayCancelRequest(
+        consentId = donatorGameUnblockConsentId,
+    ) {
+        const loadingOverlay = createOverlay({
+            title: 'Canceling Request',
+            bodyContent: 'Please wait...',
+            showLogo: true,
+        });
+        try {
+            await callRobloxApiJson({
+                subdomain: 'apis',
+                endpoint: '/child-requests-api/v1/cancel-consent-request',
+                method: 'POST',
+                body: {
+                    consentId,
+                },
+            });
+
+            loadingOverlay.close();
+
+            const cancelRequestSentOverlay = createOverlay({
+                title: 'Canceled Request',
+                bodyContent:
+                    'Your request to your parents and guardians were canceled',
+                actions: [
+                    createButton('OK', 'secondary', {
+                        onClick: () => {
+                            cancelRequestSentOverlay.close();
+                        },
+                    }),
+                ],
+                showLogo: true,
+            });
+
+            requestedDonatorGameUnblockChecked = false;
+        } catch {
+            loadingOverlay.close();
+            const cancelRequestFailedOverlay = createOverlay({
+                title: 'Request Cancellation Failed',
+                bodyContent:
+                    'Cancellation for your unblock request failed. Maybe you have been ratelimited. Check console for more details.',
+                actions: [
+                    createButton('OK', 'secondary', {
+                        onClick: () => {
+                            cancelRequestFailedOverlay.close();
+                        },
+                    }),
+                ],
+                showLogo: true,
+            });
+        }
+    }
+
+    try {
+        const canPlayUniverseRequest = (
+            await callRobloxApiJson({
+                subdomain: 'games',
+                endpoint:
+                    '/v1/games/multiget-playability-status?universeIds=' +
+                    DONATOR_PERKS_UNIVERSE_ID,
+                method: 'GET',
+            })
+        )[0];
+        canPlayUniverse = canPlayUniverseRequest.isPlayable;
+        canPlayUniverseReason = canPlayUniverseRequest.playabilityStatus;
+    } catch (error) {
+        console.warn(
+            'RoValra: Failed to get playability status of donation universe',
+            error,
+        );
+    }
+
+    try {
+        if (
+            !parentAttchedToAccountChecked &&
+            !parentAttchedToAccount &&
+            !canPlayUniverse &&
+            canPlayUniverseReason ==
+                'ContextualPlayabilityRequireParentApproval'
+        ) {
+            const approveExperienceRecourse = await callRobloxApiJson({
+                subdomain: 'apis',
+                endpoint:
+                    '/access-management/v1/upsell-feature-access?featureName=CanApproveExperience&extraParameters=W10=',
+                method: 'GET',
+            });
+            parentAttchedToAccountChecked = true;
+            parentAttchedToAccount =
+                approveExperienceRecourse.recourse.includes('ParentConsent');
+        }
+    } catch (error) {
+        console.warn(
+            'RoValra: Failed to see if there were any parents linked to account for game unblock overlay',
+            error,
+        );
+    }
+
+    try {
+        if (parentAttchedToAccount && !requestedDonatorGameUnblockChecked) {
+            const consentsPending = await callRobloxApiJson({
+                subdomain: 'apis',
+                endpoint:
+                    '/parental-controls-api/v1/parental-controls/consents?consentStatus=Pending&childUserId=' +
+                    (await getAuthenticatedUserId()),
+                method: 'GET',
+            });
+
+            requestedDonatorGameUnblock = consentsPending.consents.some(
+                (consent) =>
+                    consent.consentType === 'ManageExperience' &&
+                    consent.consentData.experienceManagementAction ===
+                        'Approve' &&
+                    consent.consentData.universeId ===
+                        String(DONATOR_PERKS_UNIVERSE_ID),
+            );
+
+            requestedDonatorGameUnblockChecked = true;
+
+            if (requestedDonatorGameUnblock) {
+                donatorGameUnblockConsentId = consentsPending.consents.find(
+                    (consent) =>
+                        consent.consentType === 'ManageExperience' &&
+                        consent.consentData.experienceManagementAction ===
+                            'Approve' &&
+                        consent.consentData.universeId ===
+                            String(DONATOR_PERKS_UNIVERSE_ID),
+                ).id;
+            } else donatorGameUnblockConsentId = 0;
+        }
+    } catch (error) {
+        console.warn('RoValra: Failed to get parent requests of a user', error);
+    }
+
+    if (
+        canPlayUniverse == false &&
+        canPlayUniverseReason == 'ContextualPlayabilityRequireParentApproval' &&
+        parentAttchedToAccount
+    ) {
+        showConfirmationPrompt({
+            title: 'Parent Action Needed',
+            message:
+                'In order to buy avatar borders, you need parent permission.',
+            confirmText: 'Send Unblock Request',
+            confirmType: 'primary',
+            cancelText: 'Cancel',
+            cancelType: 'secondary',
+            onConfirm: !requestedDonatorGameUnblock
+                ? overlayUnblockGame
+                : () => {
+                      const alreadyRequestedOverlay = createOverlay({
+                          title: 'Already Requested',
+                          bodyContent:
+                              'You already requested the experience silly!',
+                          actions: [
+                              createButton('Cancel', 'alert', {
+                                  onClick: () => {
+                                      alreadyRequestedOverlay.close();
+                                      overlayCancelRequest();
+                                  },
+                              }),
+                              createButton('Okay', 'primary', {
+                                  onClick: () => {
+                                      alreadyRequestedOverlay.close();
+                                  },
+                              }),
+                          ],
+                          showLogo: true,
+                      });
+                  },
+            onCancel: () => {},
+            closeBtnCallsCancel: true,
+        });
+    } else if (canPlayUniverse == false && canPlayUniverseReason == 'ContextualPlayabilityRequireParentApproval') {
+        const needsParentOverlay = createOverlay({
+            title: 'You cannot use Avatar Borders',
+            bodyContent:
+                'Roblox requires you to get permission from a parent but you do not have any parent linked to your account. If you want to use avatar borders you will need to link a parent account and request to unblock the experience.',
+            actions: [
+                createButton('Okay', 'secondary', {
+                    onClick: () => {
+                        needsParentOverlay.close();
+                    },
+                }),
+            ],
+            showLogo: true,
+        });
+    } else {
+        openPopup(`https://www.roblox.com/game-pass/${gamepassId}`);
+    }
 }
 
 async function openBorderOverlay(
@@ -685,11 +1320,10 @@ async function openBorderOverlay(
                 actionBtn.textContent = 'View Gamepass';
             }
         })();
-        actionBtn.onclick = () =>
-            window.open(
-                `https://www.roblox.com/game-pass/${effectiveGamepassId}`,
-                '_blank',
-            );
+        actionBtn.onclick = () => {
+            openAvatarBorderUrl(effectiveGamepassId)
+            close();
+        }
     } else {
         actionBtn.textContent = 'Unavailable';
         actionBtn.disabled = true;
@@ -804,12 +1438,14 @@ function renderDonatorPerkStatusPills(container) {
             const isIncluded =
                 cell.dataset.rovalraDonatorPerkIncluded === 'true';
             const label = isIncluded ? 'Included' : 'Not included';
-            const symbol = document.createElement('span');
-            symbol.className =
-                'grow-0 shrink-0 basis-auto icon size-[var(--icon-size-small)] ' +
-                (isIncluded
-                    ? 'icon-filled-circle-check'
-                    : 'rovalra-icon-filled-circle-minus');
+            const symbol = Icon({
+                icon: isIncluded ? 'circle-check' : 'circle-minus',
+                filled: true,
+                size: 'medium',
+                classes: isIncluded
+                    ? 'rovalra-donator-perk-status-icon-included'
+                    : 'rovalra-donator-perk-status-icon-not-included',
+            });
 
             addTooltip(symbol, label, { position: 'top' });
 
@@ -901,29 +1537,124 @@ function getDonatorPerksComparisonHtml(themeColors) {
 let contributorsCache = null;
 let contributorsSortOrder = 'most';
 
-function getContributorContributionCounts() {
-    const counts = new Map(CONTRIBUTOR_USER_IDS.map((id) => [String(id), 0]));
+function getContributorStats() {
+    const counts = new Map(CREDITS_USER_IDS.map((id) => [String(id), 0]));
+    let featureCount = 0;
 
-    const countSetting = (setting) => {
+    const countContributors = (setting, { isChild = false } = {}) => {
         if (!setting) return;
 
-        if (Array.isArray(setting.contributors)) {
-            new Set(setting.contributors.map(String)).forEach((id) => {
-                if (counts.has(id)) counts.set(id, counts.get(id) + 1);
-            });
-        }
+        const contributors = Array.isArray(setting.contributors)
+            ? new Set(setting.contributors.map(String))
+            : new Set();
 
-        Object.values(setting.childSettings || {}).forEach(countSetting);
+        if (!isChild && contributors.size === 0)
+            contributors.add(String(CREATOR_USER_ID));
+
+        contributors.forEach((id) => {
+            if (counts.has(id)) counts.set(id, counts.get(id) + 1);
+        });
+    };
+
+    const countSetting = (setting, options) => {
+        if (!setting) return;
+
+        countContributors(setting, options);
+
+        Object.values(setting.childSettings || {}).forEach((childSetting) =>
+            countSetting(childSetting, { isChild: true }),
+        );
     };
 
     Object.values(SETTINGS_CONFIG).forEach((category) => {
-        Object.values(category.settings || {}).forEach(countSetting);
+        Object.values(category.settings || {}).forEach((setting) => {
+            featureCount += 1;
+            countSetting(setting);
+        });
     });
 
-    return counts;
+    Object.values(OTHER_CONTRIBUTIONS).forEach((category) => {
+        const contributors = category.contributors;
+        for (const contributor of contributors) {
+            const id = contributor.userId;
+            if (counts.has(id)) counts.set(id, counts.get(id) + 1);
+            featureCount += 1;
+        }
+    });
+
+    return { counts, featureCount };
 }
 
-const contributorContributionCounts = getContributorContributionCounts();
+/**
+ * @returns {Record<string, Array<{key: string, feature: string, contributionDescription?: string, prLink?: string}>>}
+ */
+function getContributions() {
+    /**
+     * @type {Record<string, Array<{key: string, feature: string, contributionDescription?: string, prLink?: string}>>}
+     */
+    const contributions = {};
+    for (const contributor of CONTRIBUTOR_USER_IDS) {
+        contributions[String(contributor)] = [];
+    }
+    for (const category of Object.values(SETTINGS_CONFIG)) {
+        for (const [settingName, settingData] of Object.entries(
+            category.settings,
+        )) {
+            if (settingData.contributors !== undefined) {
+                for (const contributor of settingData.contributors) {
+                    if (contributions[String(contributor)] === undefined)
+                        contributions[String(contributor)] = [];
+                    contributions[String(contributor)].push({
+                        feature: settingData.label,
+                        key: settingName,
+                    });
+                }
+            } else {
+                if (contributions[String(CREATOR_USER_ID)] === undefined)
+                    contributions[String(CREATOR_USER_ID)] = [];
+                contributions[String(CREATOR_USER_ID)].push({
+                    feature: settingData.label,
+                    key: settingName,
+                });
+            }
+            if (settingData.childSettings) {
+                for (const [subSettingName, subSettingData] of Object.entries(
+                    settingData.childSettings,
+                )) {
+                    if (subSettingData.contributors !== undefined) {
+                        for (const contributor of subSettingData.contributors) {
+                            if (
+                                contributions[String(contributor)] === undefined
+                            )
+                                contributions[String(contributor)] = [];
+                            contributions[String(contributor)].push({
+                                feature: subSettingData.label,
+                                key: subSettingName,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+    for (const [contKey, contData] of Object.entries(OTHER_CONTRIBUTIONS)) {
+        for (const contribution of contData.contributors) {
+            contributions[String(contribution.userId)].push({
+                feature: contData.label,
+                key: contKey,
+                contributionDescription: contribution.contributionDescription,
+                prLink: contribution.relevantPR,
+            });
+        }
+    }
+
+    return contributions;
+}
+
+const {
+    counts: contributorContributionCounts,
+    featureCount: totalFeatureCount,
+} = getContributorStats();
 
 function addContributorTooltip(link, id) {
     const tooltipKey = `settings.credits.contributorTooltips.${id}`;
@@ -974,7 +1705,7 @@ function createContributorProfile(user, thumbData) {
 function renderContributors(container, users, thumbMap) {
     container.replaceChildren();
 
-    const contributors = CONTRIBUTOR_USER_IDS.map((id, index) => {
+    const contributors = CREDITS_USER_IDS.map((id, index) => {
         const stringId = String(id);
         return {
             id: stringId,
@@ -1045,11 +1776,50 @@ function renderContributors(container, users, thumbMap) {
             count: contributionCount,
         });
 
-        link.append(
+        count.addEventListener('click', async (ev) => {
+            const contributions = getContributions()[String(id)];
+
+            let markdown = `
+| ${await t('settings.credits.ui.popup.contributor')} | ${await t('settings.credits.ui.popup.featureName')} | ${await t('settings.credits.ui.popup.featureKey')} |
+|              -                                 |                   -                            |                       -                       |
+`;
+
+            for (const contribution of contributions) {
+                markdown += `| [${user.displayName}](${link.href}) | `;
+                const featureNameText = contribution.contributionDescription
+                    ? `${contribution.feature} (${await t(contribution.contributionDescription)})`
+                    : contribution.feature;
+                markdown += `${contribution.prLink ? `[${featureNameText}](${contribution.prLink})` : featureNameText} | `;
+                markdown += `${contribution.prLink ? `[${contribution.key}](${contribution.prLink})` : contribution.key} |\n`;
+            }
+
+            const html = parseMarkdown(markdown);
+
+            const bodyContent = document.createElement('div');
+            bodyContent.innerHTML = html;
+
+            const okayBtn = createButton('Okay', 'primary', {
+                onClick: async () => {
+                    overlay.close();
+                },
+            });
+
+            const overlay = createOverlay({
+                title: await t('settings.credits.ui.popup.title', {
+                    user: user.displayName,
+                }),
+                bodyContent: bodyContent,
+                actions: [okayBtn],
+                showLogo: true,
+                maxWidth: '50%',
+            });
+        });
+
+        link.appendChild(
             createContributorProfile(user, thumbMap.get(String(id))),
-            count,
         );
         item.appendChild(link);
+        item.appendChild(count);
         listContainer.appendChild(item);
     });
 
@@ -1085,7 +1855,7 @@ function renderContributorsShimmer(container) {
     const listContainer = document.createElement('ol');
     listContainer.className = 'rovalra-contributors-list';
 
-    CONTRIBUTOR_USER_IDS.forEach(() => {
+    CREDITS_USER_IDS.forEach(() => {
         const item = document.createElement('li');
         item.className = 'rovalra-donator-card rovalra-contributor-loading-row';
 
@@ -1144,7 +1914,7 @@ async function loadContributors() {
             endpoint: '/v1/users',
             method: 'POST',
             body: {
-                userIds: CONTRIBUTOR_USER_IDS,
+                userIds: CREDITS_USER_IDS,
                 excludeBannedUsers: false,
             },
         });
@@ -1154,7 +1924,7 @@ async function loadContributors() {
         const users = data.data;
 
         const thumbnails = await getBatchThumbnails(
-            CONTRIBUTOR_USER_IDS,
+            CREDITS_USER_IDS,
             'AvatarHeadshot',
             '150x150',
         );
@@ -1772,14 +2542,25 @@ export const buttonData = [
                                             <p>${ts('settings.info.review')}</p>
                                         </div>
                                         <div style="margin-top: 10px; margin-bottom: 20px;">
-                                            <a href="https://discord.gg/GHd5cSKJRk" target="_blank" class="rovalra-discord-link">${ts('settings.info.discord')}</a>
-                                            <a href="https://github.com/NotValra/RoValra" target="_blank" class="rovalra-github-link">
-                                                ${ts('settings.info.github')}
-                                                <img data-rovalra-asset="rovalraIcon" src="${assets.rovalraIcon}" style="width: 20px; height: 20px; margin-right: 0px; vertical-align: middle;" />
+                                            <a href="https://discord.gg/GHd5cSKJRk" target="_blank" class="rovalra-discord-link">
+                                                <icon>discord</icon> ${ts('settings.info.discord')}
                                             </a>
-                                            <a href="https://www.roblox.com/my/account?rovalra=donator+perks" class="rovalra-roblox-link">${ts('settings.info.support')}</a>
-                                            <a href="https://www.tiktok.com/@valrawantbanana" target="_blank" class="rovalra-tiktok-link">${ts('settings.info.tiktok')}</a>
-                                            <a href="https://x.com/ValraSwag" target="_blank" class="rovalra-x-link">${ts('settings.info.x')}</a>
+                                            <br />
+                                            <a href="https://github.com/NotValra/RoValra" target="_blank" class="rovalra-github-link">
+                                                <icon filled>github</icon> ${ts('settings.info.github')}
+                                            </a>
+                                            <br />
+                                            <a href="https://www.roblox.com/my/account?rovalra=donator+perks" class="rovalra-donator-link">
+                                                <icon filled>heart</icon> ${ts('settings.info.support')}
+                                            </a>
+                                            <br />
+                                            <a href="https://www.tiktok.com/@valrawantbanana" target="_blank" class="rovalra-tiktok-link">
+                                                <icon size="large">tik-tok</icon> ${ts('settings.info.tiktok')}
+                                            </a>
+                                            <br />
+                                            <a href="https://x.com/ValraSwag" target="_blank" class="rovalra-x-link">
+                                                <icon>twitter</icon> ${ts('settings.info.x')}
+                                            </a>
                                         </div>
                                         <div id="export-import-buttons-container" style="border-top: 1px solid var(--rovalra-secondary-text-color); opacity: 0.8; padding-top: 15px; display: flex; justify-content: flex-start; gap: 10px;"></div>
                                     </div>
@@ -1799,7 +2580,7 @@ export const buttonData = [
         get content() {
             return `
             <div style="padding: 8px;">
-                <h2 style="margin-bottom: 10px; color: var(--rovalra-main-text-color) !important;">${ts('settings.credits.contributorsTitle')}</h2>
+                <h2 style="margin-bottom: 10px; color: var(--rovalra-main-text-color) !important;">${ts('settings.credits.contributorsTitle')} <span style="font-size: 12px; color: var(--rovalra-secondary-text-color);">(${ts('settings.credits.featureCount', { count: totalFeatureCount })})</span></h2>
                 <div id="rovalra-contributors-list"></div>
             </div>`;
         },
@@ -1858,9 +2639,17 @@ export const buttonData = [
         get content() {
             return `
             <div style="padding: 8px;">
-                <h2 style="margin-bottom: 15px; color: var(--rovalra-main-text-color) !important;">Avatar Border Store</h2>
-                <p style="color: var(--rovalra-secondary-text-color); margin-bottom: 20px;">Avatar border store, buy avatar borders to directly support RoValra and the artists, <strong>Donator tier 3 gets all avatar borders for free.</strong> Buying Avatar Borders counts towards your Donator Tier!</p>
-                <div id="rovalra-store-border-container" style="color: var(--rovalra-secondary-text-color);">Loading borders...</div>
+                <div id="rovalra-store-section-tabs" style="display: flex; justify-content: flex-start; margin: 0 0 20px 0; overflow-x: auto; max-width: 100%;"></div>
+                <div id="rovalra-store-borders-section" data-store-section="borders">
+                    <h2 style="margin-bottom: 15px; color: var(--rovalra-main-text-color) !important;">Avatar Border Store</h2>
+                    <p style="color: var(--rovalra-secondary-text-color); margin-bottom: 20px;">Avatar border store, buy avatar borders to directly support RoValra and the artists, <strong>Donator tier 3 gets all avatar borders for free.</strong> Buying Avatar Borders counts towards your Donator Tier!</p>
+                    <div id="rovalra-store-border-container" style="color: var(--rovalra-secondary-text-color);">Loading borders...</div>
+                </div>
+                <div id="rovalra-store-frames-section" data-store-section="frames" hidden>
+                    <h2 style="margin-bottom: 15px; color: var(--rovalra-main-text-color) !important;">${ts('profileFrame.storeTitle')}</h2>
+                    <p style="color: var(--rovalra-secondary-text-color); margin-bottom: 20px;">${ts('profileFrame.storeDesc')}</p>
+                    <div id="rovalra-store-frame-container" style="color: var(--rovalra-secondary-text-color);">${ts('profileFrame.loading')}</div>
+                </div>
             </div>`;
         },
     },
@@ -1990,12 +2779,11 @@ async function renderAccountStanding(container) {
     container.appendChild(discordCard);
 
     // Initial instant render assuming good standing
-    discordCard.innerHTML = DOMPurify.sanitize(`
+    discordCard.innerHTML = DOMPurify.sanitize(
+        `
         <div style="display: flex; align-items: flex-start; gap: 20px;">
             <div class="standing-status-icon-bg" style="width: 48px; height: 48px; border-radius: 50%; background-color: #23a55a; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background-color 0.3s;">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
-                    <path class="standing-status-icon-path" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-                </svg>
+                <icon size="large" style="transform: translate(1px, 1px)">check-large</icon>
             </div>
             <div style="flex: 1;">
                 <h3 class="standing-status-title" style="margin: 0 0 8px 0; font-size: 18px; color: var(--rovalra-main-text-color);">Your account is in good standing.</h3>
@@ -2020,7 +2808,9 @@ async function renderAccountStanding(container) {
             <div style="font-weight: 600; font-size: 14px; margin-bottom: 8px; color: var(--rovalra-secondary-text-color);">RoValra Safety Policy</div>
             Accounts found in violation of the <a href="https://www.rovalra.com/tou/" target="_blank" style="color: inherit; text-decoration: underline;">RoValra Terms of Service</a> or deemed a risk via third-party detections will have specific features disabled. Please note that while specific online capabilities may be restricted, the RoValra safety team will <strong>never</strong> disable the entire extension or fully local features.
         </div>
-    `);
+    `,
+        { ...CUSTOM_ADDED_TAGS },
+    );
 
     if (standingCache) {
         updateAccountStandingUI(
@@ -2055,7 +2845,7 @@ function updateAccountStandingUI(discordCard, data, levels) {
     const isTemporary = Boolean(activeModeration?.moderation_expires_at);
 
     const iconBg = discordCard.querySelector('.standing-status-icon-bg');
-    const iconPath = discordCard.querySelector('.standing-status-icon-path');
+    const iconEl = iconBg.querySelector('icon');
     const statusTitle = discordCard.querySelector('.standing-status-title');
     const statusDesc = discordCard.querySelector('.standing-status-desc');
     const fill = discordCard.querySelector('.standing-status-fill');
@@ -2069,10 +2859,7 @@ function updateAccountStandingUI(discordCard, data, levels) {
 
     if (isGoodStanding) {
         iconBg.style.backgroundColor = '#23a55a';
-        iconPath.setAttribute(
-            'd',
-            'M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z',
-        );
+        ChangeIcon(iconEl, { icon: 'check-large' });
         statusTitle.textContent = 'Your account is in good standing.';
         statusDesc.textContent =
             'You do not have any active violations or restrictions from the RoValra safety team.';
@@ -2080,10 +2867,7 @@ function updateAccountStandingUI(discordCard, data, levels) {
 
     if (!isGoodStanding) {
         iconBg.style.backgroundColor = '#f23f43';
-        iconPath.setAttribute(
-            'd',
-            'M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z',
-        );
+        ChangeIcon(iconEl, { icon: 'x' });
         statusTitle.textContent = isTemporary
             ? 'Your account is temporarily limited.'
             : 'We found a violation on your account.';
@@ -2765,6 +3549,616 @@ async function renderStoreBorders(container) {
     }
 }
 
+function setupStoreSectionTabs(contentContainer) {
+    const tabHolder = contentContainer.querySelector(
+        '#rovalra-store-section-tabs',
+    );
+    if (!tabHolder || tabHolder.childElementCount > 0) return;
+
+    const sections = new Map(
+        [...contentContainer.querySelectorAll('[data-store-section]')].map(
+            (section) => [section.dataset.storeSection, section],
+        ),
+    );
+    if (sections.size < 2) return;
+
+    const showSection = (value) => {
+        for (const [name, section] of sections) {
+            section.hidden = name !== value;
+        }
+    };
+
+    const requestedTab = new URLSearchParams(window.location.search).get('tab');
+    const initialValue = sections.has(requestedTab) ? requestedTab : 'frames';
+
+    const tabs = createPillToggle({
+        options: [
+            { text: ts('profileFrame.tabFrames'), value: 'frames' },
+            { text: ts('profileFrame.tabBorders'), value: 'borders' },
+        ],
+        initialValue,
+        onChange: showSection,
+    });
+    tabs.style.flexWrap = 'wrap';
+    tabs.style.maxWidth = '100%';
+    tabHolder.appendChild(tabs);
+    showSection(initialValue);
+}
+
+// Stands in for the profile banner, which is wide with the avatar in the middle.
+// The preview has to match that shape or frames read wrong in the store.
+function createFrameHolderPreview(thumbData, { width = null } = {}) {
+    const holder = document.createElement('div');
+    holder.className = 'rovalra-profile-frame-preview';
+    if (width) holder.style.maxWidth = `${width}px`;
+
+    const scene = document.createElement('div');
+    scene.className = 'rovalra-profile-frame-preview-scene';
+
+    if (thumbData?.imageUrl) {
+        const img = document.createElement('img');
+        img.src = thumbData.imageUrl;
+        img.alt = '';
+        img.decoding = 'async';
+        scene.appendChild(img);
+    }
+
+    holder.appendChild(scene);
+
+    return holder;
+}
+
+function clearFramePreview(holder) {
+    if (!holder) return;
+
+    for (const frame of holder.querySelectorAll('.rovalra-profile-frame')) {
+        frame.remove();
+    }
+    delete holder.dataset.rovalraFrameLoading;
+    delete holder.dataset.rovalraIntendedFrame;
+}
+
+async function saveEquippedFrame(link) {
+    const value = link || 'none';
+
+    await handleSaveSettings('profileFrameChoice', value).catch(() => {});
+
+    document.dispatchEvent(
+        new CustomEvent('rovalra:syncProfileFrame', {
+            detail: { frameUrl: value },
+        }),
+    );
+
+    try {
+        await updateUserSettingViaApi('berts', link || '', {
+            throwOnError: true,
+            suppressErrorLog: true,
+        });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function updateFrameStoreUI(container, selectedValue) {
+    for (const button of container.querySelectorAll('[data-frame-equip-btn]')) {
+        const isSelected =
+            button.dataset.frameEquipBtn === selectedValue &&
+            selectedValue !== 'none';
+        const isOwned = button.dataset.frameOwned === 'true';
+
+        let text;
+        let tooltip;
+        if (isSelected) {
+            text = ts('profileFrame.equipped');
+            tooltip = ts('profileFrame.unequipTooltip');
+        } else if (isOwned) {
+            text = ts('profileFrame.equip');
+            tooltip = ts('profileFrame.equipTooltip');
+        } else {
+            text = ts('profileFrame.buy');
+            tooltip = ts('profileFrame.buyTooltip');
+        }
+
+        const contentSpan = button.querySelector('span');
+        if (contentSpan) {
+            contentSpan.textContent = text;
+        } else {
+            button.textContent = text;
+        }
+        if (button.getAttribute('title')) {
+            button.setAttribute('title', tooltip);
+        }
+    }
+
+    const unequipButton = container.querySelector('[data-frame-unequip-btn]');
+    if (unequipButton) {
+        const hasFrame = selectedValue !== 'none';
+        unequipButton.style.opacity = hasFrame ? '1' : '0.5';
+        unequipButton.style.cursor = hasFrame ? 'pointer' : 'not-allowed';
+    }
+}
+
+async function selectStoreFrame(frame, container, previewHolder) {
+    const link = frame ? frame.link : null;
+
+    clearFramePreview(previewHolder);
+    if (link) applyFrameToHolder(previewHolder, link);
+
+    updateFrameStoreUI(container, frame ? frame.value : 'none');
+
+    const synced = await saveEquippedFrame(link);
+    const localNotice = container.querySelector('[data-frame-local-notice]');
+    if (localNotice) localNotice.hidden = synced;
+}
+
+function createFrameEquipButton({
+    frame,
+    isOwned,
+    isSelected,
+    container,
+    previewHolder,
+    authedUserData,
+}) {
+    const btnContainer = document.createElement('div');
+    btnContainer.style.cssText =
+        'margin-top: 8px; width: 100%; display: flex; justify-content: center;';
+
+    const text = isSelected
+        ? ts('profileFrame.equipped')
+        : isOwned
+          ? ts('profileFrame.equip')
+          : ts('profileFrame.buy');
+    const tooltip = isSelected
+        ? ts('profileFrame.unequipTooltip')
+        : isOwned
+          ? ts('profileFrame.equipTooltip')
+          : ts('profileFrame.buyTooltip');
+
+    const pill = createPill(text, tooltip, { isButton: true });
+    pill.dataset.frameEquipBtn = frame.value;
+    pill.dataset.frameOwned = isOwned ? 'true' : 'false';
+    pill.style.cssText =
+        'width: 100%; justify-content: center; font-size: 12px; font-weight: 700;';
+
+    pill.onclick = (event) => {
+        event.stopPropagation();
+
+        const currentText = pill.textContent.trim();
+        if (currentText === ts('profileFrame.equipped')) {
+            selectStoreFrame(null, container, previewHolder);
+        } else if (currentText === ts('profileFrame.equip')) {
+            selectStoreFrame(frame, container, previewHolder);
+        } else {
+            openFrameOverlay(frame, authedUserData, container, previewHolder);
+        }
+    };
+
+    btnContainer.appendChild(pill);
+    return btnContainer;
+}
+
+async function openFrameOverlay(
+    frame,
+    authedUserData,
+    container,
+    previewHolder,
+) {
+    const ownedData = await getOwnedBorders();
+    const isOwned = isFrameOwned({ frame, ownedData });
+
+    const body = document.createElement('div');
+    body.style.cssText =
+        'display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 10px;';
+
+    const preview = createFrameHolderPreview(authedUserData?.thumbData, {
+        width: 360,
+    });
+    applyFrameToHolder(preview, frame.link);
+
+    const infoWrapper = document.createElement('div');
+    infoWrapper.style.cssText =
+        'display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100%;';
+
+    const nameLabel = document.createElement('div');
+    nameLabel.style.cssText =
+        'font-size: 18px; font-weight: 800; color: var(--rovalra-main-text-color); text-align: center;';
+    nameLabel.textContent = frame.label;
+    infoWrapper.appendChild(nameLabel);
+
+    if (!frame.isFree) {
+        const priceLabel = document.createElement('div');
+        priceLabel.style.cssText =
+            'font-size: 14px; font-weight: 600; color: var(--rovalra-secondary-text-color); display: flex; align-items: center; gap: 4px;';
+
+        getFrameAssetDetails(frame).then((details) => {
+            const price = getFrameAssetPrice(frame, details);
+            if (price === null) {
+                priceLabel.textContent = 'View item';
+                return;
+            }
+
+            const priceValue = price.toLocaleString();
+            if (!isOwned) {
+                priceLabel.innerHTML = `<span class="icon-robux-16x16"></span>${priceValue}`; //Verified
+                return;
+            }
+
+            priceLabel.innerHTML = `
+                <span style="text-decoration: line-through; opacity: 0.6; display: flex; align-items: center; gap: 2px;">
+                    <span class="icon-robux-16x16"></span>${priceValue}
+                </span>
+                <span class="rovalra-free-label" style="color: var(--rovalra-main-text-color); margin-left: 4px; cursor: help; font-size: 16px;">${ts('profileFrame.owned')}</span>
+            `; //Verified
+            const freeLabel = priceLabel.querySelector('.rovalra-free-label');
+            if (freeLabel) {
+                addTooltip(freeLabel, ts('profileFrame.ownedTooltip'), {
+                    position: 'top',
+                });
+            }
+        });
+        infoWrapper.appendChild(priceLabel);
+    } else {
+        const freeLabel = document.createElement('div');
+        freeLabel.className = 'rovalra-free-label';
+        freeLabel.textContent = ts('profileFrame.free');
+        addTooltip(freeLabel, ts('profileFrame.freeTooltip'), {
+            position: 'top',
+        });
+        infoWrapper.appendChild(freeLabel);
+    }
+
+    if (frame.artistId) {
+        infoWrapper.appendChild(createArtistCreditSection(frame.artistId));
+    }
+
+    body.append(preview, infoWrapper);
+
+    const actionBtn = document.createElement('button');
+    actionBtn.className = 'btn-cta-md btn-min-width';
+    actionBtn.style.width = '100%';
+
+    if (isOwned) {
+        actionBtn.textContent = `${ts('profileFrame.equip')} ${frame.label}`;
+        actionBtn.onclick = () => {
+            selectStoreFrame(frame, container, previewHolder);
+            close();
+        };
+    } else {
+        const assetUrl = getFrameAssetUrl(frame);
+        if (!assetUrl) {
+            actionBtn.textContent = 'View item';
+            actionBtn.disabled = true;
+        } else {
+            actionBtn.textContent = 'Loading...';
+            getFrameAssetDetails(frame).then((details) => {
+                const price = getFrameAssetPrice(frame, details);
+                actionBtn.innerHTML =
+                    price === null
+                        ? 'View item'
+                        : `<span class="icon-robux-16x16" style="margin-right: 6px; vertical-align: middle; position: relative; top: -1px; filter: brightness(0) invert(1);"></span>Buy for ${price.toLocaleString()}`; //Verified
+            });
+            actionBtn.onclick = () => window.open(assetUrl, '_blank');
+        }
+    }
+
+    const { close } = createOverlay({
+        title: frame.label,
+        bodyContent: body,
+        actions: [actionBtn],
+        maxWidth: '400px',
+    });
+}
+
+function renderFrameStoreSkeleton(container) {
+    container.innerHTML = '';
+
+    const previewShimmer = document.createElement('div');
+    previewShimmer.style.cssText =
+        'display: flex; flex-direction: column; align-items: center; padding: 20px; background: var(--rovalra-container-background-color); border-radius: 12px; margin-bottom: 20px;';
+    previewShimmer.innerHTML = `
+        <div class="shimmer" style="width: 180px; height: 12px; margin-bottom: 10px; border-radius: 4px;"></div>
+        <div class="setting-label-divider" style="width: 100%; margin-bottom: 10px;"></div>
+        <div class="shimmer" style="width: 100%; max-width: 520px; aspect-ratio: 3.1; border-radius: 10px; margin: 15px 0;"></div>
+    `; //Verified
+    container.appendChild(previewShimmer);
+
+    for (let i = 0; i < 2; i++) {
+        const header = document.createElement('div');
+        header.className = 'shimmer';
+        header.style.cssText =
+            'width: 130px; height: 18px; margin: 20px 0 10px 0; border-radius: 4px;';
+        container.appendChild(header);
+
+        const grid = document.createElement('div');
+        grid.style.cssText =
+            'display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; margin-bottom: 10px;';
+
+        for (let j = 0; j < 3; j++) {
+            const card = document.createElement('div');
+            card.style.cssText =
+                'display: flex; flex-direction: column; align-items: center; padding: 12px; background: var(--rovalra-container-background-color); border-radius: 12px; gap: 12px; opacity: 0.8;';
+            card.innerHTML = `
+                <div class="shimmer" style="width: 100%; aspect-ratio: 3.1; border-radius: 10px;"></div>
+                <div class="shimmer" style="width: 60%; height: 12px; border-radius: 4px;"></div>
+                <div class="shimmer" style="width: 100px; height: 16px; border-radius: 20px;"></div>
+            `; //Verified
+            grid.appendChild(card);
+        }
+        container.appendChild(grid);
+    }
+}
+
+async function renderStoreFrames(container) {
+    renderFrameStoreSkeleton(container);
+
+    try {
+        const [frames, ownedData, userId] = await Promise.all([
+            getFrames(),
+            getOwnedBorders(),
+            getAuthenticatedUserId().catch(() => null),
+        ]);
+
+        if (!frames.length) {
+            container.innerHTML = '';
+            const empty = document.createElement('p');
+            empty.style.cssText =
+                'color: var(--rovalra-secondary-text-color); margin: 0;';
+            empty.textContent = ts('profileFrame.noFrames');
+            container.appendChild(empty);
+            return;
+        }
+
+        let authedUserData = null;
+        if (userId) {
+            const [displayName, thumbnails] = await Promise.all([
+                getUserDisplayName(userId).catch(() => 'User'),
+                getBatchThumbnails([userId], 'Avatar', '420x420'),
+            ]);
+            authedUserData = {
+                userId,
+                displayName:
+                    typeof displayName === 'string' ? displayName : 'User',
+                thumbData: thumbnails[0] || { state: 'Error' },
+            };
+        }
+
+        let currentFrameLink = null;
+        if (userId) {
+            const userSettings = await getUserSettings(userId, {
+                noCache: true,
+            }).catch(() => null);
+            if (userSettings?.berts && userSettings.berts !== 'none') {
+                currentFrameLink = userSettings.berts;
+            }
+        }
+
+        const currentFrame = findFrameByLink(frames, currentFrameLink);
+        const currentFrameValue = currentFrame ? currentFrame.value : 'none';
+
+        container.innerHTML = '';
+
+        const previewWrapper = document.createElement('div');
+        previewWrapper.style.cssText =
+            'display: flex; flex-direction: column; align-items: center; padding: 20px; background: var(--rovalra-container-background-color); border-radius: 12px; margin-bottom: 20px;';
+        previewWrapper.innerHTML = `
+            <div style="font-weight: 700; font-size: 12px; text-transform: uppercase; margin-bottom: 10px; color: var(--rovalra-secondary-text-color);">${ts('profileFrame.currentPreview')}</div>
+            <div class="setting-label-divider" style="width: 100%; margin-bottom: 15px;"></div>
+        `; //Verified
+        container.appendChild(previewWrapper);
+
+        const previewHolder = createFrameHolderPreview(
+            authedUserData?.thumbData,
+            { width: 520 },
+        );
+        previewWrapper.appendChild(previewHolder);
+        if (currentFrameLink) {
+            applyFrameToHolder(previewHolder, currentFrameLink);
+        }
+
+        const unequipButton = createSquareButton({
+            content: ts('profileFrame.unequip'),
+            onClick: () => selectStoreFrame(null, container, previewHolder),
+            width: '120px',
+            height: 'height-1000',
+            paddingX: 'padding-x-medium',
+            radius: 'radius-medium',
+            disableTextTruncation: true,
+        });
+        unequipButton.dataset.frameUnequipBtn = 'true';
+        unequipButton.style.marginTop = '15px';
+        unequipButton.style.opacity = currentFrameLink ? '1' : '0.5';
+        unequipButton.style.cursor = currentFrameLink
+            ? 'pointer'
+            : 'not-allowed';
+        previewWrapper.appendChild(unequipButton);
+
+        const localNotice = document.createElement('div');
+        localNotice.dataset.frameLocalNotice = 'true';
+        localNotice.style.cssText =
+            'font-size: 11px; color: var(--rovalra-secondary-text-color); text-align: center; margin-top: 10px; opacity: 0.8;';
+        localNotice.textContent = `${ts('profileFrame.localOnly')}: ${ts('profileFrame.localOnlyTooltip')}`;
+        localNotice.hidden = true;
+        previewWrapper.appendChild(localNotice);
+
+        const categories = groupFramesByCategory(frames);
+        const storeSections = [];
+
+        const emptyTabMessage = document.createElement('p');
+        emptyTabMessage.style.cssText =
+            'color: var(--rovalra-secondary-text-color); margin: 16px 0 0 0;';
+        emptyTabMessage.textContent = ts('profileFrame.noFramesInTab');
+        emptyTabMessage.hidden = true;
+
+        const setFrameTab = (tab) => {
+            let visibleCount = 0;
+            for (const section of storeSections) {
+                const isVisible =
+                    tab === 'all' ||
+                    (tab === 'new' && section.isNew) ||
+                    tab === section.categoryValue;
+
+                section.header.style.display = isVisible ? '' : 'none';
+                section.grid.style.display = isVisible ? 'grid' : 'none';
+                if (isVisible) visibleCount += 1;
+            }
+            emptyTabMessage.hidden = visibleCount > 0;
+        };
+
+        const tabOptions = [{ text: ts('profileFrame.all'), value: 'all' }];
+        if (categories.some((category) => category.new)) {
+            tabOptions.push({ text: ts('profileFrame.new'), value: 'new' });
+        }
+        tabOptions.push(
+            ...categories.map((category) => ({
+                text: category.label,
+                value: category.value,
+            })),
+        );
+
+        const tabControls = document.createElement('div');
+        tabControls.style.cssText =
+            'display: flex; justify-content: flex-start; margin: 0 0 16px 0; overflow-x: auto; max-width: 100%;';
+        const frameTabs = createPillToggle({
+            options: tabOptions,
+            initialValue: 'all',
+            onChange: setFrameTab,
+        });
+        frameTabs.style.flexWrap = 'wrap';
+        frameTabs.style.maxWidth = '100%';
+        tabControls.appendChild(frameTabs);
+        container.append(tabControls, emptyTabMessage);
+
+        for (const category of categories) {
+            const categoryHeader = document.createElement('h3');
+            categoryHeader.style.cssText =
+                'color: var(--rovalra-main-text-color); font-size: 16px; margin: 20px 0 10px 0; padding-bottom: 8px; border-bottom: 1px solid var(--rovalra-border-color);';
+            categoryHeader.textContent = category.label;
+            container.appendChild(categoryHeader);
+
+            const framesGrid = document.createElement('div');
+            framesGrid.style.cssText =
+                'display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; margin-bottom: 10px; align-items: flex-start;';
+            container.appendChild(framesGrid);
+
+            storeSections.push({
+                categoryValue: category.value,
+                isNew: category.new,
+                header: categoryHeader,
+                grid: framesGrid,
+            });
+
+            for (const frame of category.frames) {
+                const frameIsOwned = isFrameOwned({ frame, ownedData });
+                const isSelected = currentFrameValue === frame.value;
+
+                const frameCard = document.createElement('div');
+                frameCard.dataset.frameCard = frame.value;
+                frameCard.style.cssText =
+                    'display: flex; flex-direction: column; align-items: center; padding: 12px; background: var(--rovalra-container-background-color); border-radius: 12px; border: none;';
+
+                const cardPreview = createFrameHolderPreview(
+                    authedUserData?.thumbData,
+                );
+                frameCard.appendChild(cardPreview);
+
+                const frameLabel = document.createElement('div');
+                frameLabel.style.cssText =
+                    'color: var(--rovalra-main-text-color); font-weight: 600; font-size: 13px; text-align: center; margin: 4px 0;';
+                frameLabel.textContent = frame.label;
+                frameCard.appendChild(frameLabel);
+
+                const priceLabel = document.createElement('div');
+                if (!frame.isFree) {
+                    priceLabel.style.cssText =
+                        'font-size: 12px; font-weight: 600; color: var(--rovalra-secondary-text-color); display: flex; align-items: center; justify-content: center; gap: 4px;';
+                } else {
+                    priceLabel.className = 'rovalra-free-label';
+                    priceLabel.textContent = ts('profileFrame.free');
+                    priceLabel.style.cssText =
+                        'width: 100%; text-align: center;';
+                    addTooltip(priceLabel, ts('profileFrame.freeTooltip'), {
+                        position: 'top',
+                    });
+                }
+                frameCard.appendChild(priceLabel);
+
+                if (frame.artistId) {
+                    frameCard.appendChild(
+                        createArtistCreditSection(frame.artistId),
+                    );
+                }
+
+                frameCard.appendChild(
+                    createFrameEquipButton({
+                        frame,
+                        isOwned: frameIsOwned,
+                        isSelected,
+                        container,
+                        previewHolder,
+                        authedUserData,
+                    }),
+                );
+
+                framesGrid.appendChild(frameCard);
+
+                const intersection = observeIntersection(
+                    frameCard,
+                    (entry) => {
+                        if (!entry.isIntersecting) return;
+
+                        intersection.unobserve();
+                        applyFrameToHolder(cardPreview, frame.link);
+
+                        if (frame.isFree) return;
+                        getFrameAssetDetails(frame).then((details) => {
+                            const price = getFrameAssetPrice(frame, details);
+                            if (price === null) {
+                                priceLabel.textContent = 'View item';
+                                return;
+                            }
+
+                            const priceValue = price.toLocaleString();
+                            if (!frameIsOwned) {
+                                priceLabel.innerHTML = `<span class="icon-robux-16x16"></span>${priceValue}`; //Verified
+                                return;
+                            }
+
+                            priceLabel.innerHTML = `
+                                <span style="text-decoration: line-through; opacity: 0.6; display: flex; align-items: center; gap: 2px;">
+                                    <span class="icon-robux-16x16"></span>${priceValue}
+                                </span>
+                                <span class="rovalra-free-label" style="color: var(--rovalra-main-text-color); margin-left: 4px; cursor: help; font-size: 14px;">${ts('profileFrame.owned')}</span>
+                            `; //Verified
+                            const freeLabel = priceLabel.querySelector(
+                                '.rovalra-free-label',
+                            );
+                            if (freeLabel) {
+                                addTooltip(
+                                    freeLabel,
+                                    ts('profileFrame.ownedTooltip'),
+                                    { position: 'top' },
+                                );
+                            }
+                        });
+                    },
+                    { threshold: 0.01 },
+                );
+            }
+        }
+
+        setFrameTab('all');
+        updateFrameStoreUI(container, currentFrameValue);
+    } catch (error) {
+        console.error('RoValra: Failed to render store frames', error);
+        container.innerHTML = '';
+        const failed = document.createElement('p');
+        failed.style.cssText = 'color: var(--rovalra-secondary-text-color);';
+        failed.textContent = ts('profileFrame.failedToLoad');
+        container.appendChild(failed);
+    }
+}
+
 function createEquipButton(
     variant,
     animVariant,
@@ -2997,50 +4391,59 @@ export async function updateContent(buttonInfo, contentContainer) {
                 );
                 const thumbData = thumbs[0];
                 const userThumbUrl = thumbData?.imageUrl;
+                const tierContainer = contentContainer.querySelector(
+                    `#donator-tier-${userTier}-header`,
+                );
 
-                if (userThumbUrl) {
-                    const tierContainer = contentContainer.querySelector(
-                        `#donator-tier-${userTier}-header`,
+                if (tierContainer) {
+                    const currentTierPill = createPill(
+                        ts('settings.donatorPerks.currentTier'),
+                        null,
+                        { size: 'small' },
                     );
-                    if (tierContainer) {
-                        const tierCopy = tierContainer.querySelector(
-                            '.rovalra-donator-tier-copy',
-                        );
-                        const tierBadge = document.createElement('span');
-                        tierBadge.dataset.rovalraSkipUsdEstimate = 'true';
-                        tierBadge.style.cssText =
-                            'margin-top: 6px; display: inline-flex; align-items: center; gap: 5px; background-color: var(--rovalra-container-background-color, rgba(0,0,0,0.1)); padding: 2px 7px 2px 2px; border-radius: 16px; border: 1px solid var(--rovalra-border-color); color: var(--rovalra-main-text-color); white-space: nowrap; width: fit-content;';
+                    currentTierPill.classList.add(
+                        'rovalra-donator-current-tier-pill',
+                    );
+                    tierContainer.appendChild(currentTierPill);
+                }
 
-                        const img = document.createElement('img');
-                        img.src = userThumbUrl;
-                        img.style.cssText =
-                            'width: 19px; height: 19px; border-radius: 50%; flex-shrink: 0;';
-                        tierBadge.appendChild(img);
+                if (userThumbUrl && tierContainer) {
+                    const tierCopy = tierContainer.querySelector(
+                        '.rovalra-donator-tier-copy',
+                    );
+                    const tierBadge = document.createElement('span');
+                    tierBadge.dataset.rovalraSkipUsdEstimate = 'true';
+                    tierBadge.style.cssText =
+                        'margin-top: 6px; display: inline-flex; align-items: center; gap: 5px; background-color: var(--rovalra-container-background-color, rgba(0,0,0,0.1)); padding: 2px 7px 2px 2px; border-radius: 16px; border: 1px solid var(--rovalra-border-color); color: var(--rovalra-main-text-color); white-space: nowrap; width: fit-content;';
 
-                        const totalDonated =
-                            getTotalDonatedFromBadgesResponse(badgesResponse);
-                        let totalDonatedLabel = null;
-                        if (totalDonated !== null) {
-                            totalDonatedLabel = totalDonated.toLocaleString();
-                            const donationTotal =
-                                document.createElement('span');
-                            const robuxIcon = document.createElement('span');
-                            robuxIcon.className = 'icon-robux-16x16';
-                            robuxIcon.style.marginRight = '2px';
-                            donationTotal.append(robuxIcon, totalDonatedLabel);
-                            donationTotal.style.cssText =
-                                'display: inline-flex; align-items: center; gap: 1px; color: var(--rovalra-main-text-color); font-size: 11px; font-weight: 700;';
-                            tierBadge.appendChild(donationTotal);
-                        }
-                        addTooltip(
-                            tierBadge,
-                            totalDonatedLabel
-                                ? `Your total donated to RoValra: ${totalDonatedLabel}`
-                                : 'Your donator tier',
-                            { position: 'top' },
-                        );
-                        (tierCopy || tierContainer).appendChild(tierBadge);
+                    const img = document.createElement('img');
+                    img.src = userThumbUrl;
+                    img.style.cssText =
+                        'width: 19px; height: 19px; border-radius: 50%; flex-shrink: 0;';
+                    tierBadge.appendChild(img);
+
+                    const totalDonated =
+                        getTotalDonatedFromBadgesResponse(badgesResponse);
+                    let totalDonatedLabel = null;
+                    if (totalDonated !== null) {
+                        totalDonatedLabel = totalDonated.toLocaleString();
+                        const donationTotal = document.createElement('span');
+                        const robuxIcon = document.createElement('span');
+                        robuxIcon.className = 'icon-robux-16x16';
+                        robuxIcon.style.marginRight = '2px';
+                        donationTotal.append(robuxIcon, totalDonatedLabel);
+                        donationTotal.style.cssText =
+                            'display: inline-flex; align-items: center; gap: 1px; color: var(--rovalra-main-text-color); font-size: 11px; font-weight: 700;';
+                        tierBadge.appendChild(donationTotal);
                     }
+                    addTooltip(
+                        tierBadge,
+                        totalDonatedLabel
+                            ? `Your total donated to RoValra: ${totalDonatedLabel}`
+                            : 'Your donator tier',
+                        { position: 'top' },
+                    );
+                    (tierCopy || tierContainer).appendChild(tierBadge);
                 }
             }
         }
@@ -3055,6 +4458,15 @@ export async function updateContent(buttonInfo, contentContainer) {
         if (borderContainer) {
             renderStoreBorders(borderContainer);
         }
+
+        const frameContainer = contentContainer.querySelector(
+            '#rovalra-store-frame-container',
+        );
+        if (frameContainer) {
+            renderStoreFrames(frameContainer);
+        }
+
+        setupStoreSectionTabs(contentContainer);
     }
 
     if (buttonId === 'changelogs') {
@@ -3475,9 +4887,9 @@ function initializeHeartbeatSpoofer() {
                 if (newOptions.headers.get('RoValra-Internal') === 'true') {
                     hasHeader = true;
                     const copiedHeaders = {};
-                    newOptions.headers.forEach((value, key) => {
-                        if (key.toLowerCase() !== 'rovalra-internal') {
-                            copiedHeaders[key] = value;
+                    newOptions.headers.forEach((headerValue, headerName) => {
+                        if (headerName.toLowerCase() !== 'rovalra-internal') {
+                            copiedHeaders[headerName] = headerValue;
                         }
                     });
                     newOptions.headers = copiedHeaders;

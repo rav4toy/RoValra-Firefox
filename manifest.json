@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "RoValra - A Better Addon",
-    "version": "2.6.1.1",
+    "version": "2.6.7.31",
     "description": "An extension aiming to provide features that other Roblox extensions paywall!",
     "content_scripts": [
         {
@@ -31,7 +31,8 @@
         "https://*.rovalra.com/*",
         "https://*.rbxcdn.com/*",
         "https://rbxcdn.com/*",
-        "https://flagcdn.com/*"
+        "https://flagcdn.com/*",
+        "https://i.ibb.co/*"
     ],
     "background": {
         "scripts": ["background.js"],

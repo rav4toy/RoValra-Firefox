@@ -1,4 +1,10 @@
 {
+    "freeRobloxPlusThemes": {
+        "notice": "Select and use any theme without Roblox Plus."
+    },
+    "items": {
+        "hiddenFromMarketplace": "This item is hidden from the marketplace"
+    },
     "homeLayout": {
         "untitled": "Untitled",
         "empty": "RoValra was unable to find the layout, refresh and try again.",
@@ -53,6 +59,17 @@
             "settings": "Settings"
         }
     },
+    "friendLabels": {
+        "menuAction": "Set Friend Label",
+        "dialogTitle": "Label {{displayName}}",
+        "inputLabel": "Friend Label",
+        "inputPlaceholder": "Close Friends, School,",
+        "existingLabels": "Existing labels",
+        "friendFallback": "Friend",
+        "save": "Save",
+        "remove": "Remove",
+        "cancel": "Cancel"
+    },
     "underratedGames": {
         "topic": "Underrated Games",
         "subtitle": "Underrated games hand picked by the RoValra community.",
@@ -93,6 +110,7 @@
     "categorizeWearing": {
         "currentlyWearing": "Currently Wearing",
         "items": "Items",
+        "cosmetics": "Cosmetics",
         "bodyParts": "Body Parts",
         "animations": "Animations",
         "emotes": "Emotes"
@@ -240,6 +258,42 @@
         "light": "Light",
         "dark": "Dark"
     },
+    "customThemeEditor": {
+        "background": {
+            "title": "Customize Image Settings",
+            "source": "Image Source",
+            "opacity": "Image Opacity",
+            "customSize": "Custom Scale",
+            "blur": "Blur",
+            "overrideTopbarSidebar": "Transparent Mode",
+            "size": {
+                "label": "Background Size",
+                "cover": "Cover",
+                "contain": "Contain",
+                "auto": "Auto",
+                "custom": "Custom"
+            },
+            "position": {
+                "label": "Background Position",
+                "center": "Center",
+                "top": "Top",
+                "bottom": "Bottom",
+                "left": "Left",
+                "right": "Right",
+                "topleft": "Top Left",
+                "topright": "Top Right",
+                "bottomleft": "Bottom Left",
+                "bottomright": "Bottom Right"
+            },
+            "overlay": {
+                "color": "Overlay Color",
+                "opacity": "Overlay Opacity"
+            },
+            "errors": {
+                "invalidUrl": "Enter a valid https image URL."
+            }
+        }
+    },
     "previousPrice": {
         "offSale": "Off Sale",
         "text": "Previous Price:",
@@ -326,6 +380,36 @@
         "multiplePurchases": "{{count}} purchases",
         "stillCalculating": "Total Spent is still calculating."
     },
+    "spentPerGame": {
+        "title": "Total Spent per Game",
+        "disclaimer": "This can be inaccurate due to Roblox limitations",
+        "mostSpent": "Most spent",
+        "mostPurchases": "Most purchases",
+        "noPurchases": "No game purchases found.",
+        "singlePurchase": "1 purchase",
+        "multiplePurchases": "{{count}} purchases",
+        "loadMore": "Load more ({{remaining}} remaining)",
+        "searchPlaceholder": "Search games",
+        "loading": "Loading game spending…",
+        "scanInProgress": "Transaction scan in progress. This may take a while.",
+        "loadError": "Unable to load game spending."
+    },
+    "spentPerCreator": {
+        "title": "Total Spent per Creator",
+        "disclaimer": "This can be inaccurate due to Roblox limitations",
+        "mostSpent": "Most spent",
+        "mostPurchases": "Most purchases",
+        "noPurchases": "No creator purchases found.",
+        "unknownCreator": "Unknown creator",
+        "includeGameCreators": "Include game creators",
+        "singlePurchase": "1 purchase",
+        "multiplePurchases": "{{count}} purchases",
+        "loadMore": "Load more ({{remaining}} remaining)",
+        "searchPlaceholder": "Search creators",
+        "loading": "Loading creator spending…",
+        "scanInProgress": "Transaction scan in progress. This may take a while.",
+        "loadError": "Unable to load creator spending."
+    },
     "settings": {
         "tabs": {
             "info": "Info",
@@ -338,23 +422,27 @@
             "title": "RoValra Information!",
             "desc1": "RoValra is an extension that's trying to make basic quality-of-life features free and accessible to everyone by making everything completely open-source.",
             "desc2": "Some free features still rely on RoValra servers and cost money to run.",
-            "desc3": "Supporter donations help cover those costs, letting RoValra keep more features free for everyone while continuing to improve over time. ❤️",
+            "desc3": "Supporter donations help cover those costs, letting RoValra keep more features free for everyone while continuing to improve over time. <icon style=\"color:#c13ad9\" filled>heart</icon>",
             "desc4": "RoValra is a passion project and has always been one.",
             "suggestions": "If you have any feature suggestions please let me know in my Discord server or via GitHub",
             "bugs": "If you find any bugs let me know in my Discord server or via GitHub",
             "review": "If you like this extension, sharing it with friends helps a lot ❤️",
             "discord": "Discord Server",
-            "github": "Github Repo",
+            "github": "Github Repository",
             "support": "Support RoValra",
-            "tiktok": "TikTok: ValraWantBanana",
-            "x": "X: ValraSwag"
+            "tiktok": "ValraWantBanana",
+            "x": "ValraSwag"
         },
         "credits": {
             "contributorsTitle": "Contributors",
+            "featureCount_one": "{{count}} feature",
+            "featureCount_other": "{{count}} features",
             "contributorTooltips": {
                 "146089324": "WoozyNate made fisch, which is where the old RoValra logo is from. You should check out fisch!",
                 "1337447242": "Made the new logo and all store page images.",
-                "795922138": "Came up with the name 'RoValra' as a joke, which was too funny not to use."
+                "795922138": "Came up with the name 'RoValra' as a joke, which was too funny not to use.",
+                "2974594300": "UI Improvements, bug fixes, and other contributions.",
+                "170038374": "Made concepts which some RoValra features are based on."
             },
             "sortLabel": "Sort contributors",
             "sortMost": "Most",
@@ -363,7 +451,49 @@
             "contributionCount_other": "Contributed to {{count}} features",
             "backendContributorsNote": "These people helped with non feature related things.",
             "loadingContributors": "Loading...",
-            "failedToLoadContributors": "Failed to load contributors."
+            "failedToLoadContributors": "Failed to load contributors.",
+            "otherContributions": {
+                "badges": {
+                    "translatorAndNate": "Added translator badge and WoozyNate badge",
+                    "nateGilbertFix": "Fix nates badge to be gilbert again"
+                },
+                "caching": {
+                    "hashmap": "Added hashmap to the cache handler"
+                },
+                "sidebar": {
+                    "rblxUpdateFix": "Fixed the sidebar for a Roblox update"
+                },
+                "rbxm": {
+                    "fixDesyncCframe": "Fixed RBXM parser desync and CFRAME format"
+                },
+                "markdown": {
+                    "untrustedMd": "Added limited markdown parser for untrusted users"
+                },
+                "settingsHandler": {
+                    "unifiedApi": "Added unified settings API"
+                },
+                "contributorList": {
+                    "creditsImprovement": "Improved credits in the contributor list",
+                    "nonSettingCredits": "Add credits for features and improvements that don't have their own settings"
+                },
+                "donatorTierPage": {
+                    "newIndicators": "Added new indicators for donator tiers"
+                },
+                "iconElement": {
+                    "addIcons": "Added the `<icon>` element that allows using Builder Icons, Material Icons, and RoValra Icons.",
+                    "addElement": "Added the base `<icon>` element that allows using Builder Icons. Prev, going to use the built-in `<i>` element with classes.",
+                    "makeRoValraIcons": "Added a font for RoValra Icons + a new building method for the website.",
+                    "addBuilderIconsWOFF": "Added hosting for Builder Icons on the RoValra Website, as well as different font files that are less in size."
+                }
+            },
+            "ui": {
+                "popup": {
+                    "title": "{{user}}'s Contributions",
+                    "contributor": "Contributor",
+                    "featureName": "Feature",
+                    "featureKey": "(Dev) Feature Key"
+                }
+            }
         },
         "donatorPerks": {
             "title": "Donator Perks!",
@@ -373,6 +503,7 @@
             "goToGame": "Go to Donation Game",
             "perkTiers": "Perk Tiers",
             "perk": "Perk",
+            "currentTier": "Current Tier",
             "tier1": "Tier 1: Supporter",
             "tier1Desc": "Donate <strong>any amount</strong>",
             "tier1Reward": "Donator 1 Badge",
@@ -393,6 +524,10 @@
         "search": {
             "minLength": "Please enter at least 2 characters to search.",
             "noResults": "No settings found for \"{{query}}\"."
+        },
+        "compatibilityWarning": {
+            "title": "RoValra may not work properly with {{extensions}} enabled.",
+            "description": "We do not promise support for {{extensions}}."
         }
     },
     "qolToggles": {
@@ -459,6 +594,12 @@
         "deleteSearchHistoryTitle": "Delete Search History",
         "deleteSearchHistoryMessage": "Are you sure you want to delete this search history entry?",
         "delete": "Delete"
+    },
+    "friendOwnership": {
+        "pillLabel": "{{count}} Friends own",
+        "pillTooltip": "See which friends own this item",
+        "overlayTitle": "{{count}} Friends own this item",
+        "unknownUser": "User {{id}}"
     },
     "regionPlayButton": {
         "ariaLabel": "Select or Join Preferred Server Region",
@@ -738,7 +879,10 @@
     },
     "rovalraBadges": {
         "userVerified": "User is ID verified.",
-        "userNotVerified": "User is not ID verified."
+        "userNotVerified": "User is not ID verified.",
+        "userAgeVerified": "User is age checked.",
+        "userNotAgeVerified": "User is not age checked.",
+        "userAgeVerificationMayBeInaccurate": "This may be inaccurate"
     },
     "friendsSince": {
         "friended": "Friended",
@@ -755,7 +899,9 @@
         "originProfileShare": "Profile Share",
         "originPhoneContacts": "Phone Contacts",
         "originPeopleYouMayKnow": "People You May Know",
+        "originschoolmemberlist": "School Member List",
         "originFriendLink": "Friend Link",
+        "originSocialTabsPage": "Social Tabs Page",
         "originUnknown": "Unknown"
     },
     "lastPlayed": {
@@ -785,6 +931,14 @@
         "bulkUnfriend": "Bulk Unfriend",
         "exitBulkMode": "Exit Bulk Mode",
         "successMessage": "Successfully unfriended {{successCount}}/{{totalCount}} friends!"
+    },
+    "unfriendDetector": {
+        "titleSingle": "Unfriend Detected",
+        "titlePlural": "Unfriends Detected",
+        "descriptionSingle": "This friend removed you since you last played:",
+        "descriptionPlural": "These {{count}} friends removed you since you last played:",
+        "viewProfile": "View {{name}}'s profile",
+        "dismiss": "Dismiss"
     },
     "leaveGroups": {
         "confirmLeave": "Confirm Leave",
@@ -994,9 +1148,23 @@
             "user": "User"
         }
     },
+    "viewid": {
+        "viewId": "View IDs",
+        "popup": {
+            "title": "Item IDs",
+            "button": {
+                "copy": "Copy Data",
+                "copyMd": "Copy Markdown Data"
+            }
+        }
+    },
     "friendsListOverlay": {
         "title": "Friends playing {{gameName}}",
         "join": "Join"
+    },
+    "friendUsernames": {
+        "ariaLabel": "Username: @{{username}}",
+        "nameWithUsername": "{{displayName}} (@{{username}})"
     },
     "placeVisits": {
         "label": "{{count}} Place Visits",
@@ -1007,10 +1175,44 @@
         "joinedLabel": "Joined",
         "unknown": "Unknown"
     },
+    "showcase": {
+        "tab": "Showcase",
+        "favoriteGame": "Favourite experience",
+        "favoriteGroup": "Favourite community",
+        "favoriteDecal": "Art Showcase",
+        "chooseGame": "Choose an experience to feature on your profile.",
+        "noFeaturedGame": "No featured experience yet. :C",
+        "chooseGroup": "Choose a community to feature on your profile.",
+        "noFeaturedGroup": "No featured community yet. :,(",
+        "chooseDecal": "Enter a decal ID to feature an image on your profile.",
+        "noFeaturedDecal": "No featured image yet. :C",
+        "searchGame": "Search for an experience to feature",
+        "searchGroup": "Search for a community to feature",
+        "clearGame": "Clear favourite experience",
+        "clearGroup": "Clear favourite community",
+        "gameOptions": "Favourite experience options",
+        "groupOptions": "Favourite community options",
+        "decalId": "Decal ID",
+        "decalImageOptions": "Image options",
+        "openImagePage": "Open image page",
+        "report": "Report",
+        "clearDecal": "Clear Image",
+        "by": "By",
+        "maturity": "Maturity",
+        "maturityUnavailable": "Maturity unavailable",
+        "members": "{{count}} members",
+        "noResultsGame": "Unable to find experience.",
+        "noResultsGroup": "Unable to find community.",
+        "unknownExperience": "Unknown experience",
+        "unknownCommunity": "Unknown community",
+        "verifiedBadge": "Verified Badge Icon"
+    },
     "profileCustomization": {
         "pill": "Customization",
-        "pillTooltip": "Switch your avatar borders.",
+        "pillTooltip": "Switch your avatar borders and frames.",
         "title": "Profile Customization",
+        "tabBorders": "Avatar Borders",
+        "tabFrames": "Frames",
         "currentPreview": "Current Selection Preview",
         "unequip": "Unequip",
         "unequipTooltip": "Click to unequip this border",
@@ -1028,7 +1230,38 @@
         "free": "Free",
         "noBorders": "No borders found.",
         "noBordersInTab": "No borders found in this tab.",
+        "noFrames": "No frames found.",
+        "noFramesInTab": "No frames found in this tab.",
+        "none": "None",
         "failedToLoad": "Failed to load your borders. Please try again later."
+    },
+    "profileFrame": {
+        "storeTitle": "Profile Frame Store",
+        "storeDesc": "Profile frames wrap the whole avatar display on your profile. Buying frames directly supports RoValra and the artists, and counts towards your Donator Tier. Frames are not included in the Donator Tier 3 unlock, that covers avatar borders only.",
+        "tabBorders": "Avatar Borders",
+        "tabFrames": "Frames",
+        "loading": "Loading frames...",
+        "currentPreview": "Current Frame Preview",
+        "all": "All",
+        "new": "New",
+        "static": "STATIC",
+        "animated": "ANIMATED",
+        "equip": "Equip",
+        "equipTooltip": "Equip this frame",
+        "equipped": "Equipped",
+        "unequipTooltip": "Click to unequip this frame",
+        "unequip": "Unequip",
+        "buy": "Buy",
+        "buyTooltip": "Buy this frame",
+        "owned": "Owned",
+        "ownedTooltip": "You own this frame!",
+        "free": "Free",
+        "freeTooltip": "This frame is free to equip.",
+        "localOnly": "Saved locally",
+        "localOnlyTooltip": "RoValra could not save this frame to your account yet, so it is only visible to you on this browser.",
+        "noFrames": "No frames available.",
+        "noFramesInTab": "No frames found in this tab.",
+        "failedToLoad": "Failed to load frames. Please try again later."
     },
     "profileNotes": {
         "ariaLabel": "Private profile note",
@@ -1046,6 +1279,7 @@
         "ariaLabel": "Pronouns: {{pronouns}}"
     },
     "profile": {
+        "socialLinks": "Social links",
         "currencyTransfer": "Send Robux",
         "currencyTransferConfirmation": "This will open the Roblox client allowing you to send robux.",
         "openClient": "Open Client"
@@ -1083,6 +1317,13 @@
             "privateServersCreatedSmall": "Private servers created for free",
             "robuxSentSmall": "Robux sent to friends",
             "delayNotice": "All data shown here is delayed by 1 day"
+        },
+        "transferLimits": {
+            "dailyLimitLeft": "Daily limit left",
+            "monthlyLimitLeft": "Monthly limit left",
+            "sentToday": "Sent today",
+            "sentThisMonth": "Sent this month",
+            "caption": "Daily limit is {{dailyLimit}}. Monthly limit is {{monthlyLimit}}. Updates every 5 minutes. The remaining are estimates and may be inaccurate."
         },
         "privateServerTooltip": {
             "tooltipText": "Original Price: <b>{{originalPrice}} Robux</b><br>Currently shows as <b>Free</b> due to Roblox Plus."

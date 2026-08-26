@@ -9,6 +9,7 @@ import {
     removeStylesheet,
 } from '../../../core/ui/cssInjector.js';
 import { callRobloxApiJson } from '../../../core/api.js';
+import { getUserAvatar } from '../../../core/apis/avatar.js';
 import { createSquareButton } from '../../../core/ui/profile/header/squarebutton.js';
 import { createOverlay } from '../../../core/ui/overlay.js';
 import { createDropdown } from '../../../core/ui/dropdown.js';
@@ -35,12 +36,25 @@ import {
     Instance,
     HumanoidDescriptionWrapper,
     Outfit,
+    OutfitModel,
+    BackgroundRenderer,
+    Authentication,
     API,
     FLAGS,
     AnimatorWrapper,
     AnimationTrack,
     animNamesR15,
     animNamesR6,
+    getExtentsForParts,
+    CFrame,
+    add as addVec3,
+    zoomExtents,
+    magnitude as magnitudeVec3,
+    minus as minusVec3,
+    mapNum,
+    lerpCFrame,
+    getHeadExtents,
+    traverseRigCFrame,
 } from 'roavatar-renderer';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as THREE from 'three';
@@ -52,19 +66,30 @@ import {
     loadFirefoxSafeGltf,
 } from '../../../core/firefox/resources.js';
 import { getBundledRigBuffer } from '../../../core/firefox/bundledRigs.js';
+import {
+    applyFrameToHolder,
+    getEnabledFrameLink,
+    setFrameRenderMode,
+} from '../profileFrame.js';
 FLAGS.ENABLE_API_MESH_CACHE = false;
 FLAGS.ENABLE_API_RBX_CACHE = false;
 FLAGS.USE_WORKERS = false;
 FLAGS.ONLINE_ASSETS = true;
+FLAGS.AUDIO_ENABLED = false;
 
 backgroundRendererRequests();
 
 let currentRig = null;
 let currentRigType = null;
+let profileBackgroundRenderer = null;
+const profileRenderAuthentication = new Authentication();
 let emoteStopTimer = null;
 let preloadedCanvas = null;
 let isPreloading = false;
 let globalAvatarData = null;
+let globalAvatarBackgroundId = null;
+let interceptedProfileData = null;
+let profileEnvironmentEnabled = false;
 let customModelInstance = null;
 let avatarDataPromise = null;
 let isCustomEnvLoaded = false;
@@ -76,8 +101,8 @@ const EFFECT_BLACK_KEY_SOFTNESS = 0.02;
 
 let isAnimatePatched = false;
 const raycaster = new THREE.Raycaster();
-let intendedDistance = 15;
-let lastAppliedDistance = 15;
+let intendedDistance = 10;
+let lastAppliedDistance = 10;
 let lastCameraPos = new THREE.Vector3();
 let lastTargetPos = new THREE.Vector3();
 let raycastFrameSkip = 0;
@@ -86,6 +111,7 @@ let isRenderingPaused = false;
 let currentDirectTrack = null;
 let directEmoteTimer = null;
 let hasMovedCamera = false;
+let hasSetInitialCamera = false;
 let activeProfileRenderUserId = null;
 let profileRenderObserversSetup = false;
 let removeRoblox3dObserver = null;
@@ -93,8 +119,39 @@ let renderContainerObserver = null;
 let autoSwitchObserver = null;
 let animationLoopStarted = false;
 let autoSwitchedProfileUserId = null;
+let profileRenderFrameSettingListener = null;
+const profileFrameOverflowStyles = new Map();
 const resizeObserversByContainer = new WeakMap();
 const blackKeyedEffectMaterials = new WeakSet();
+
+//used for transitioning between focusing on body and head
+let headFocusDistance = 4; //distance it stops transitioning to head
+let bodyFocusDistance = 6; //distance it starts transitioning to head
+let bodyCenterCFrame = new CFrame(0,4,0);
+let bodyHeadCFrame = new CFrame(0,4,0);
+
+function updateProfileBackground(profileData) {
+    const backgroundId =
+        Number(profileData?.components?.ProfileBackground?.assetId) || null;
+    if (globalAvatarBackgroundId === backgroundId) return;
+
+    globalAvatarBackgroundId = backgroundId;
+    if (profileBackgroundRenderer) {
+        profileBackgroundRenderer.setBackground(
+            profileEnvironmentEnabled ? null : backgroundId,
+        );
+    }
+}
+
+function disableProfileRenderPlanes() {
+    if (RBXRenderer.plane) RBXRenderer.plane.visible = false;
+    if (RBXRenderer.shadowPlane) RBXRenderer.shadowPlane.visible = false;
+}
+
+window.addEventListener('rovalra-profile-platform-response', (event) => {
+    interceptedProfileData = event.detail;
+    updateProfileBackground(interceptedProfileData);
+});
 
 function isRoavatarEffectMaterial(material) {
     return (
@@ -210,14 +267,81 @@ window.addEventListener('mouseup', (e) => {
 const isMoving = () => movementKeys.some((key) => keysDown[key]);
 const isFreecamActive = () => isLeftMouseDown && isMoving();
 
+function calculateControlsTargetCFrame() {
+    const controls = RBXRenderer.getRendererControls();
+    const distance = controls.getDistance();
+
+    //normalize distance within range
+    const time = Math.max(Math.min(mapNum(distance, headFocusDistance, bodyFocusDistance, 0, 1), 1), 0);
+
+    const resultCF = lerpCFrame(bodyHeadCFrame, bodyCenterCFrame, time);
+    return resultCF;
+}
+
+function updateControlsTargetCFrame() {
+    const controls = RBXRenderer.getRendererControls();
+
+    //calculate new target and difference
+    const newTarget = calculateControlsTargetCFrame().Position;
+    const oldTarget = controls.target.toArray();
+    const diffTarget = minusVec3(newTarget, oldTarget);
+
+    //apply target difference to camera position (to avoid camera rotating)
+    const cameraCF = RBXRenderer.getCameraCFrame();
+    cameraCF.Position = addVec3(cameraCF.Position, diffTarget);
+    RBXRenderer.setCameraCFrame(cameraCF);
+
+    //finally update target
+    controls.target.set(...newTarget);
+}
+
 function resetCamera() {
     const controls = RBXRenderer.getRendererControls();
     const camera = RBXRenderer.getRendererCamera();
     if (!controls || !camera) return;
 
-    controls.target.set(0, 4, 0);
-    camera.position.set(0, 4, -45);
-    intendedDistance = 0;
+    if (currentRig) {
+        //get rig extents, size and center
+        const [lowerExtents, higherExtents] = getExtentsForParts(currentRig.GetDescendants(), false);
+        const size = higherExtents.minus(lowerExtents);
+        const centerCF = currentRig.Child("HumanoidRootPart").Prop("CFrame");
+
+        //place camera in front of body slightly up
+        let cameraCF = centerCF.clone();
+        cameraCF.Position = addVec3(cameraCF.Position, [0,0.25,-1]);
+        cameraCF = CFrame.lookAt(cameraCF.Position, centerCF.Position);
+
+        //adjust distance so full character fits
+        zoomExtents(cameraCF, centerCF, size, camera.fov, 1.1, "calculate");
+
+        //adjust distances for transition between head and body focus
+        const currentDistance = magnitudeVec3(minusVec3(cameraCF.Position, centerCF.Position));
+        const headExtents = getHeadExtents(currentRig);
+        if (headExtents) {
+            const [headLowerExtents, headHigherExtents] = headExtents;
+            const headSize = headHigherExtents.minus(headLowerExtents);
+            const headSizeDistance = headSize.magnitude();
+
+            headFocusDistance = Math.min(headSizeDistance, currentDistance - 1);
+            bodyFocusDistance = currentDistance;
+        } else {
+            bodyFocusDistance = currentDistance * 2/3;
+            headFocusDistance = bodyFocusDistance * 1/3;
+        }
+
+        bodyCenterCFrame = centerCF;
+        bodyHeadCFrame = traverseRigCFrame(currentRig.Child("Head"), false, true); //head cframe at rest pose
+
+        //update values in three js
+        controls.target.set(...centerCF.Position);
+        camera.position.set(...cameraCF.Position);
+    } else {
+        //default camera position if rig isnt available
+        controls.target.set(0, 4, 0);
+        camera.position.set(0, 4, -6);
+    }
+    intendedDistance = 10;
+    lastAppliedDistance = 10;
     controls.update();
 
     hasMovedCamera = false;
@@ -273,6 +397,7 @@ function customAnimate() {
 
     if (controls && camera) {
         updateCameraSystem();
+        updateControlsTargetCFrame();
         controls.update();
     }
 
@@ -350,6 +475,24 @@ async function loadRig(rigType) {
     const outfit = new Outfit();
     outfit.fromJson(globalAvatarData);
     outfit.playerAvatarType = rigType;
+
+    const outfitModel = new OutfitModel();
+    outfitModel.outfit = outfit;
+    if (globalAvatarBackgroundId) {
+        outfitModel.background = { id: globalAvatarBackgroundId };
+    }
+
+    if (!profileBackgroundRenderer) {
+        profileBackgroundRenderer = new BackgroundRenderer(
+            profileRenderAuthentication,
+            outfitModel.background?.id,
+            RBXRenderer.firstScene,
+        );
+        profileBackgroundRenderer.affectSceneAppearance = false;
+        profileBackgroundRenderer.startAnimating();
+    } else {
+        profileBackgroundRenderer.setBackground(outfitModel.background?.id);
+    }
 
     let rigLoadStage = 'copy bundled rig bytes';
 
@@ -1527,7 +1670,10 @@ function startAnimationLoop() {
 
             if (currentRig) {
                 if (currentRig.preRender) currentRig.preRender();
-                RBXRenderer.addInstance(currentRig, null);
+                RBXRenderer.addInstance(
+                    currentRig,
+                    profileRenderAuthentication,
+                );
             }
             lastRenderTime = currentTime - (delta % interval);
         }
@@ -1632,12 +1778,8 @@ function setupAtmosphere(scene, config, isCustomEnv = false) {
         });
     }
 
-    const shouldShowPlane =
-        config.showFloor !== undefined ? config.showFloor : !isCustomEnv;
-
-    if (RBXRenderer.shadowPlane)
-        RBXRenderer.shadowPlane.visible = shouldShowPlane;
-    if (RBXRenderer.plane) RBXRenderer.plane.visible = shouldShowPlane;
+    if (RBXRenderer.shadowPlane) RBXRenderer.shadowPlane.visible = false;
+    if (RBXRenderer.plane) RBXRenderer.plane.visible = false;
 
     if (config.fog) {
         scene.fog = new THREE.Fog(
@@ -1664,7 +1806,7 @@ const DEFAULT_VOID_CONFIG = {
                 type: 'DirectionalLight',
                 color: '#ffffff',
                 intensity: 1.5,
-                position: [10, 20, 10],
+                position: [-5, 15, -8],
                 castShadow: true,
             },
         ],
@@ -1688,6 +1830,10 @@ function resetProfileRenderState() {
         currentRig.Destroy();
         currentRig = null;
     }
+    if (profileBackgroundRenderer) {
+        profileBackgroundRenderer.destroy();
+        profileBackgroundRenderer = null;
+    }
     if (customModelInstance) {
         RBXRenderer.getScene()?.remove(customModelInstance);
         customModelInstance = null;
@@ -1698,10 +1844,13 @@ function resetProfileRenderState() {
 
     currentRigType = null;
     globalAvatarData = null;
+    globalAvatarBackgroundId = null;
+    interceptedProfileData = null;
     customModelInstance = null;
     avatarDataPromise = null;
     isPreloading = false;
     isCustomEnvLoaded = false;
+    profileEnvironmentEnabled = false;
     environmentConfig = null;
     activeEmoteId = null;
     recenterBtnRef = null;
@@ -1713,6 +1862,7 @@ function resetProfileRenderState() {
     raycastTargets = [];
     isRenderingPaused = false;
     hasMovedCamera = false;
+    hasSetInitialCamera = false;
     autoSwitchedProfileUserId = null;
     lastLoadedUrl = null;
 }
@@ -1788,15 +1938,13 @@ async function preloadAvatar(userId = getUserIdFromUrl()) {
                     'tooltipText',
                     'tooltipLink',
                 ]),
-                callRobloxApiJson({
-                    subdomain: 'avatar',
-                    endpoint: `/v2/avatar/users/${requestedUserId}/avatar`,
-                }),
+                getUserAvatar(requestedUserId),
             ]);
 
             if (activeProfileRenderUserId !== requestedUserId) return null;
 
             globalAvatarData = avatarData;
+            updateProfileBackground(interceptedProfileData);
 
             await new Promise((r) => setTimeout(r, 0));
             if (activeProfileRenderUserId !== requestedUserId) return null;
@@ -1828,6 +1976,8 @@ async function preloadAvatar(userId = getUserIdFromUrl()) {
                     'profile3DRenderForceDisabled',
                 );
 
+                disableProfileRenderPlanes();
+
                 RBXRenderer.setBackgroundTransparent(true);
                 preloadedCanvas = RBXRenderer.getRendererElement();
                 preloadedCanvas.classList.add('rovalra-canvas');
@@ -1845,6 +1995,11 @@ async function preloadAvatar(userId = getUserIdFromUrl()) {
             if (activeProfileRenderUserId !== requestedUserId) return null;
 
             await loadRig(globalAvatarData.playerAvatarType);
+
+            if (!hasSetInitialCamera) {
+                resetCamera();
+                hasSetInitialCamera = true;
+            }
 
             if (preloadedCanvas) {
                 preloadedCanvas.style.visibility = 'visible';
@@ -1867,6 +2022,7 @@ async function preloadAvatar(userId = getUserIdFromUrl()) {
                 const isOwnProfile =
                     String(requestedUserId) === String(authUserId);
                 const useDevEnvironment = settings.environmentTester;
+                profileEnvironmentEnabled = !!useDevEnvironment;
 
                 if (useDevEnvironment) {
                     environmentConfig = {
@@ -1970,6 +2126,7 @@ async function preloadAvatar(userId = getUserIdFromUrl()) {
                     );
                     const environmentEndpoint =
                         selectedEnv?.environmentEndpoint || null;
+                    profileEnvironmentEnabled = !!environmentEndpoint;
 
                     if (environmentEndpoint) {
                         environmentConfig = await callRobloxApiJson({
@@ -2121,12 +2278,17 @@ async function preloadAvatar(userId = getUserIdFromUrl()) {
 
             await setupEnvironment().catch((err) => {
                 console.error('RoValra: Background env load failed', err);
+                profileEnvironmentEnabled = false;
                 setupAtmosphere(
                     RBXRenderer.getScene(),
                     DEFAULT_VOID_CONFIG.atmosphere,
                     false,
                 );
             });
+
+            profileBackgroundRenderer?.setBackground(
+                profileEnvironmentEnabled ? null : globalAvatarBackgroundId,
+            );
 
             return globalAvatarData;
         } catch (err) {
@@ -2150,7 +2312,13 @@ async function attachPreloadedAvatar(container) {
         width: '100%',
         height: '100%',
         position: 'relative',
+        overflow: 'visible',
     });
+
+    const profileHolder = container.closest('.thumbnail-holder-position');
+    setFrameRenderMode(profileHolder, true);
+    allowProfileFrameBleed(container);
+    syncProfileRenderFrame(container);
 
     const twoDContainer = document.querySelector(
         '.thumbnail-holder-position .thumbnail-2d-container',
@@ -2201,9 +2369,59 @@ async function attachPreloadedAvatar(container) {
     }
 }
 
+function allowProfileFrameBleed(container) {
+    let element = container;
+    for (let depth = 0; depth < 8 && element; depth += 1) {
+        const computedStyle = window.getComputedStyle(element);
+        if (computedStyle.overflow !== 'visible') {
+            if (!profileFrameOverflowStyles.has(element)) {
+                profileFrameOverflowStyles.set(element, element.style.overflow);
+            }
+            element.style.overflow = 'visible';
+        }
+
+        if (element.classList.contains('profile-avatar-left')) break;
+        element = element.parentElement;
+    }
+}
+
+function restoreProfileFrameBleed() {
+    for (const [element, overflow] of profileFrameOverflowStyles) {
+        if (overflow) element.style.overflow = overflow;
+        else element.style.removeProperty('overflow');
+    }
+    profileFrameOverflowStyles.clear();
+}
+
+async function syncProfileRenderFrame(container) {
+    const frameLink = await getEnabledFrameLink(
+        activeProfileRenderUserId || getUserIdFromUrl(),
+    );
+    if (!container.isConnected) return;
+
+    container.style.overflow = 'visible';
+    applyFrameToHolder(container, frameLink, { mountDirectly: true });
+}
+
+function syncProfileRenderFrames() {
+    document
+        .querySelectorAll('.thumbnail-holder-position .thumbnail-3d-container')
+        .forEach((container) => syncProfileRenderFrame(container));
+}
+
 function setupProfileRenderObservers() {
     if (profileRenderObserversSetup) return;
     profileRenderObserversSetup = true;
+
+    profileRenderFrameSettingListener = (event) => {
+        if (event.detail?.name === 'profileFrameEnabled') {
+            syncProfileRenderFrames();
+        }
+    };
+    document.addEventListener(
+        'rovalra:settingSaved',
+        profileRenderFrameSettingListener,
+    );
 
     injectStylesheet('css/thumbnailholder.css', 'rovalra-thumbnail-holder-css');
 
@@ -2279,6 +2497,20 @@ function teardownProfileRenderObservers() {
     removeRoblox3dObserver?.disconnect();
     renderContainerObserver?.disconnect();
     autoSwitchObserver?.disconnect();
+    if (profileRenderFrameSettingListener) {
+        document.removeEventListener(
+            'rovalra:settingSaved',
+            profileRenderFrameSettingListener,
+        );
+        profileRenderFrameSettingListener = null;
+    }
+    document
+        .querySelectorAll('.thumbnail-holder-position .thumbnail-3d-container')
+        .forEach((container) => applyFrameToHolder(container, null));
+    document
+        .querySelectorAll('.thumbnail-holder-position')
+        .forEach((holder) => setFrameRenderMode(holder, false));
+    restoreProfileFrameBleed();
     removeRoblox3dObserver = null;
     renderContainerObserver = null;
     autoSwitchObserver = null;

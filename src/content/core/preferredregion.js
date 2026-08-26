@@ -15,6 +15,7 @@ import {
     REGIONS,
     getFullRegionName,
     getStateCodeFromRegion,
+    loadDatacenterMap,
 } from './regions.js';
 
 export { getStateCodeFromRegion };
@@ -125,6 +126,17 @@ export async function performJoinAction(
         let bestRecycledTier = Infinity;
         let totalUniqueServersSeen = 0;
 
+        const settings = await chrome.storage.local.get({
+            preferredRegionUseRobloxLatency: true,
+            preferredRegionLocalSearchEnabled: false,
+        });
+        const forceLocalSearch =
+            settings.preferredRegionLocalSearchEnabled === true;
+        const useRobloxLatencyForAutomatic =
+            !forceLocalSearch &&
+            !preferredRegionCode &&
+            settings.preferredRegionUseRobloxLatency;
+
         await ClosestServer.dataPromise;
 
         updateLoadingOverlayText('Detecting your location...');
@@ -176,23 +188,50 @@ export async function performJoinAction(
         }
 
         let runManualScan = true;
-        let manualScanReason = `Region API unavailable. Scanning for ${shortTargetName}...`;
+        let manualScanReason = forceLocalSearch
+            ? `Scanning locally for ${shortTargetName}...`
+            : `Region API unavailable. Scanning for ${shortTargetName}...`;
 
         if (!userRequestedStop) {
-            updateLoadingOverlayText(`Searching in ${shortTargetName}...`);
-            const rovalraResult = await ClosestServer.findServerViaRovalraApi(
-                placeId,
-                universeId,
-                preferredRegionCode,
-                failedRegionNames,
-                joinedServerIds,
-                () => userRequestedStop,
-            );
+            let rovalraResult = null;
 
-            if (rovalraResult.status === 'JOINED') {
+            if (useRobloxLatencyForAutomatic) {
+                updateLoadingOverlayText(
+                    'Finding the lowest-latency server...',
+                );
+                const latencyCandidate =
+                    await ClosestServer.findServerViaRobloxLatencyApi(
+                        placeId,
+                        joinedServerIds,
+                        () => userRequestedStop,
+                    );
+
+                if (latencyCandidate) {
+                    bestServerFoundSoFar = latencyCandidate;
+                    runManualScan = false;
+                }
+            }
+
+            if (
+                runManualScan &&
+                !useRobloxLatencyForAutomatic &&
+                !forceLocalSearch
+            ) {
+                updateLoadingOverlayText(`Searching in ${shortTargetName}...`);
+                rovalraResult = await ClosestServer.findServerViaRovalraApi(
+                    placeId,
+                    universeId,
+                    preferredRegionCode,
+                    failedRegionNames,
+                    joinedServerIds,
+                    () => userRequestedStop,
+                );
+            }
+
+            if (rovalraResult?.status === 'JOINED') {
                 joined = true;
                 runManualScan = false;
-            } else if (rovalraResult.status === 'FOUND_FALLBACK') {
+            } else if (rovalraResult?.status === 'FOUND_FALLBACK') {
                 const candidate = rovalraResult.servers[0];
                 const cId = candidate.server_id || candidate.id;
                 if (cId && (await isServerActive(placeId, cId))) {
@@ -204,13 +243,14 @@ export async function performJoinAction(
                     runManualScan = true;
                     manualScanReason = `Next best servers via API are inactive. Scanning locally for ${shortTargetName}...`;
                 }
-            } else if (rovalraResult.status === 'NO_SERVERS') {
+            } else if (rovalraResult?.status === 'NO_SERVERS') {
                 runManualScan = true;
                 manualScanReason = `No servers found in ${shortTargetName} via API. Scanning locally...`;
             }
         }
 
         if (runManualScan && !joined && !userRequestedStop) {
+            await loadDatacenterMap();
             let effectiveMaxPages = MAX_SERVER_PAGES;
             if (
                 preferredRegionCode &&
@@ -385,7 +425,11 @@ export async function performJoinAction(
                 }
             }
 
-            if (preferredRegionCode && !userRequestedStop) {
+            if (
+                preferredRegionCode &&
+                !forceLocalSearch &&
+                !userRequestedStop
+            ) {
                 updateLoadingOverlayText(
                     `Searching for closest region to ${shortTargetName}...`,
                 );

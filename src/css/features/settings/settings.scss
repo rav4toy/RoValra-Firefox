@@ -230,14 +230,18 @@ body.rovalra-settings-page {
 
     .rovalra-contributors-item {
         padding-left: 4px;
-    }
-
-    .rovalra-contributor-row {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 12px;
         width: 100%;
+    }
+
+    .rovalra-contributor-row {
+        //display: flex;
+        //align-items: center;
+        //justify-content: space-between;
+        gap: 12px;
+        //width: 100%;
         padding: 8px 12px;
         border-radius: 8px;
         background-color: var(
@@ -263,9 +267,16 @@ body.rovalra-settings-page {
     }
 
     .rovalra-contributor-count {
+        display: inline;
         flex-shrink: 0;
         color: var(--rovalra-secondary-text-color);
         font-size: 13px;
+        transition: color 0.4s ease;
+        cursor: pointer;
+    }
+
+    .rovalra-contributor-count:hover {
+        color: rgb(194, 223, 250);
     }
 
     .rovalra-contributor-loading-row {
@@ -311,6 +322,29 @@ body.rovalra-settings-page {
         color: var(--rovalra-secondary-text-color);
     }
 
+    #rovalra-donator-perks-donation-button {
+        & > span > svg {
+            position: absolute;
+            top: 20%;
+            left: 35%;
+            transition: opacity 250ms;
+            opacity: 0;
+            pointer-events: none;
+        }
+        & > span > span {
+            transition: opacity 250ms;
+        }
+
+        &[data-rovalra-donator-perks-donation-button-loading='true'] > span {
+            & > svg {
+                opacity: 1;
+            }
+            & > span {
+                opacity: 0;
+            }
+        }
+    }
+
     .rovalra-donator-perks-compare {
         display: flex;
         flex-direction: column;
@@ -324,6 +358,7 @@ body.rovalra-settings-page {
     }
 
     .rovalra-donator-tier-heading {
+        position: relative;
         display: flex;
         align-items: center;
         gap: 10px;
@@ -336,6 +371,17 @@ body.rovalra-settings-page {
         border: 1px solid var(--rovalra-border-color, rgba(128, 128, 128, 0.2));
         border-radius: 8px;
         color: var(--rovalra-main-text-color);
+    }
+
+    .rovalra-donator-current-tier-pill {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        z-index: 1;
+        transform: translate(-50%, -50%);
+        background-color: #fff;
+        color: #000;
+        white-space: nowrap;
     }
 
     .rovalra-donator-tier-heading img {
@@ -438,8 +484,21 @@ body.rovalra-settings-page {
         vertical-align: middle;
     }
 
-    .rovalra-icon-filled-circle-minus {
-        --svg: url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%2732%27%20height%3D%2732%27%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M12%202C6.48%202%202%206.48%202%2012s4.48%2010%2010%2010%2010-4.48%2010-10S17.52%202%2012%202m5%2011H7v-2h10z%22%3E%3C%2Fpath%3E%3C%2Fsvg%3E');
+    .rovalra-donator-perk-status-icon {
+        display: inline-flex;
+        width: var(--icon-size-small, 16px);
+        height: var(--icon-size-small, 16px);
+        flex: 0 0 auto;
+        vertical-align: middle;
+    }
+
+    .rovalra-donator-perk-status-icon svg {
+        width: 100%;
+        height: 100%;
+        fill: currentColor;
+    }
+
+    .rovalra-donator-perk-status-icon-not-included {
         color: #909090;
     }
 
@@ -643,27 +702,17 @@ body.rovalra-settings-page {
         text-decoration: underline;
     }
 
-    a.rovalra-discord-link {
-        color: #3479b7 !important;
-    }
-    a.rovalra-roblox-link {
-        color: #c13ad9 !important;
-    }
     a.rovalra-tiktok-link {
-        color: #b91e4dff !important;
-    }
-    a.rovalra-github-link {
-        color: #1e722a !important;
+        & > icon { /* the tiktok icon is very small so i made it large then put it back and aligned it with the other text */
+            transform: translate(-4px, 1px);
+            margin-right: -8px;
+        }
     }
     a.rovalra-review-link {
         color: #1976d2 !important;
     }
     a.rovalra-extension-link {
         color: #0066cc !important;
-    }
-    :root.dark-theme & a.rovalra-discord-link,
-    :root[data-theme='dark'] & a.rovalra-discord-link {
-        color: #7289da !important;
     }
 
     @media (max-width: 1000px) {

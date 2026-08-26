@@ -25,7 +25,7 @@ import {
     getRemoteSettingLocks,
     refreshRemoteSettingLocks,
 } from './remoteSettingLocks.js';
-import { sanitizeCustomTheme } from '../themeCustom.js';
+import { sanitizeBackgroundImage } from '../backgroundImage.js';
 import { dispatchPageEvent } from '../firefox/pageBridge.js';
 import './settingsCompat';
 
@@ -33,12 +33,15 @@ let currentUserTier = 0;
 let gradientSyncTimeout = null;
 let gradientNameSyncTimeout = null;
 let donatorTierPromise = null;
+let inMemoryDonatorResponse = null;
+let inMemoryDonatorUserId = null;
+let settingsKeySyncQueue = Promise.resolve();
 const colorLiveSaveTimeouts = new Map();
 const FEATURE_STATUS_PROMPT_ACK_KEY = 'featureStatusPromptAcknowledged';
-const CUSTOM_THEME_NAME_MAX_LENGTH = 20;
 const PROFILE_PRONOUNS_SETTING_NAME = 'profilePronouns';
 const PROFILE_PRONOUNS_API_KEY = 'pronouns';
 const PROFILE_PRONOUNS_AGREEMENT_KEY = 'rovalra_pronouns_guidelines_agreed';
+const INVALID_HTTP_URL = Symbol('invalid-http-url');
 
 function applyCharacterReplacements(value, replacements) {
     if (typeof value !== 'string' || !replacements) return value;
@@ -179,40 +182,6 @@ const getFeatureStatusPromptPills = () =>
         '<span class="rovalra-pill deprecated">Deprecated</span>',
     ].join('');
 
-function sanitizeCustomThemeSlots(value) {
-    if (!Array.isArray(value)) return [];
-
-    const slotsByIndex = new Map();
-
-    value.slice(0, 5).forEach((slot, fallbackIndex) => {
-        const source = slot && typeof slot === 'object' ? slot : {};
-        if (!slot || typeof slot !== 'object') return;
-
-        const rawSlotIndex = Number(source.slot ?? source.index);
-        const slotIndex = Number.isFinite(rawSlotIndex)
-            ? Math.max(0, Math.min(4, Math.round(rawSlotIndex)))
-            : fallbackIndex;
-        const name =
-            typeof source.name === 'string' && source.name.trim()
-                ? sanitizeString(source.name).slice(
-                      0,
-                      CUSTOM_THEME_NAME_MAX_LENGTH,
-                  )
-                : `Custom Theme ${slotIndex + 1}`;
-        const themeSource = source.theme || source.colors || source;
-
-        slotsByIndex.set(slotIndex, {
-            slot: slotIndex,
-            name,
-            theme: sanitizeCustomTheme(themeSource),
-        });
-    });
-
-    return [...slotsByIndex.values()].sort(
-        (left, right) => left.slot - right.slot,
-    );
-}
-
 const shouldShowFeatureStatusPrompt = async (config) => {
     if (!isStatusLabeledOffByDefaultSetting(config)) return false;
 
@@ -230,6 +199,47 @@ const shouldShowFeatureStatusPrompt = async (config) => {
 const markFeatureStatusPromptAcknowledged = async () => {
     await chrome.storage.local.set({ [FEATURE_STATUS_PROMPT_ACK_KEY]: true });
 };
+
+function normalizeHttpUrlSetting(value) {
+    if (value === null || value === undefined) return null;
+
+    const trimmedValue = String(value).trim();
+    if (!trimmedValue) return null;
+
+    try {
+        const url = new URL(trimmedValue);
+        return url.protocol === 'http:' || url.protocol === 'https:'
+            ? trimmedValue
+            : INVALID_HTTP_URL;
+    } catch {
+        return INVALID_HTTP_URL;
+    }
+}
+
+async function restoreTextSettingInput(settingName) {
+    const input = document.getElementById(settingName);
+    if (!(input instanceof HTMLInputElement)) return;
+
+    const storedSettings = await chrome.storage.local.get([
+        settingName,
+        'rovalra_settings',
+    ]);
+    const storedValue =
+        storedSettings[settingName] ??
+        storedSettings.rovalra_settings?.[settingName] ??
+        '';
+
+    input.value = typeof storedValue === 'string' ? storedValue : '';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+async function restoreTextSettingInputValue(settingName, value) {
+    const input = document.getElementById(settingName);
+    if (!(input instanceof HTMLInputElement)) return;
+
+    input.value = typeof value === 'string' ? value : '';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+}
 
 function queueGradientNameSync(settingsOverride = {}) {
     if (gradientNameSyncTimeout) clearTimeout(gradientNameSyncTimeout);
@@ -271,6 +281,11 @@ export const syncDonatorTier = async () => {
         return null;
     }
 
+    if (inMemoryDonatorUserId !== currentUserId) {
+        inMemoryDonatorUserId = currentUserId;
+        inMemoryDonatorResponse = null;
+    }
+
     const state = (await CacheHandler.get(
         'donator_info',
         'sync_state',
@@ -284,6 +299,8 @@ export const syncDonatorTier = async () => {
         lastTier: 0,
         userId: null,
     };
+
+    state.cachedResponse = null;
 
     if (state.userId !== currentUserId) {
         state.lastSync = 0;
@@ -307,8 +324,8 @@ export const syncDonatorTier = async () => {
         state.priorityActive && isUrlChange && state.checksLeft > 0;
     const isExpired = now - state.lastSync > 5 * 60 * 1000;
 
-    if (state.cachedResponse && !isPriorityCheck && !isExpired) {
-        return state.cachedResponse;
+    if (inMemoryDonatorResponse && !isPriorityCheck && !isExpired) {
+        return inMemoryDonatorResponse;
     }
 
     donatorTierPromise = (async () => {
@@ -321,7 +338,7 @@ export const syncDonatorTier = async () => {
             });
 
             if (!response?.badges) {
-                return state.cachedResponse || null;
+                return inMemoryDonatorResponse || null;
             }
 
             const badges = response.badges;
@@ -350,8 +367,9 @@ export const syncDonatorTier = async () => {
             state.lastTier = tier;
             state.lastSync = Date.now();
             state.lastPath = currentPath;
-            state.cachedResponse = response;
+            inMemoryDonatorResponse = response;
             state.userId = currentUserId;
+            state.cachedResponse = null;
 
             await CacheHandler.set(
                 'donator_info',
@@ -377,7 +395,7 @@ export const syncDonatorTier = async () => {
                 error: error.message || error,
                 stack: error.stack,
             });
-            return state.cachedResponse || null;
+            return inMemoryDonatorResponse || null;
         } finally {
             donatorTierPromise = null;
         }
@@ -436,11 +454,10 @@ export const loadSettings = async () => {
                         }
                     }
 
-                    const normalisedSettings = settings;
                     for (const [key, value] of Object.entries(forcedSettings)) {
-                        normalisedSettings[key] = value;
+                        settings[key] = value;
                     }
-                    resolve(normalisedSettings);
+                    resolve(settings);
                 }
             },
         );
@@ -450,6 +467,26 @@ export const loadSettings = async () => {
 export const enforceSettingOverrides = async () => {
     try {
         const settings = await loadSettings();
+        const settingNames = [];
+        for (const category of Object.values(SETTINGS_CONFIG)) {
+            for (const [settingName, config] of Object.entries(
+                category.settings,
+            )) {
+                settingNames.push(settingName);
+                if (config.childSettings) {
+                    settingNames.push(...Object.keys(config.childSettings));
+                }
+            }
+        }
+        const storedSettings = await chrome.storage.local.get([
+            ...settingNames,
+            'rovalra_settings',
+        ]);
+        const bundledSettings = storedSettings.rovalra_settings || {};
+        const getStoredSetting = (name) =>
+            Object.prototype.hasOwnProperty.call(storedSettings, name)
+                ? storedSettings[name]
+                : bundledSettings[name];
         const data = await chrome.storage.local.get([
             'profile3DRenderForceDisabled',
         ]);
@@ -474,10 +511,11 @@ export const enforceSettingOverrides = async () => {
                             overrides[name] = false;
                         }
                     }
-                    if (conf.locked) {
-                        if (settings[name] === true) {
-                            overrides[name] = false;
-                        }
+                    if (
+                        (conf.locked || conf.deprecated) &&
+                        getStoredSetting(name) === true
+                    ) {
+                        overrides[name] = false;
                     }
                 };
 
@@ -610,6 +648,25 @@ export const handleSaveSettings = async (settingName, value) => {
                     if (value === null) {
                         sanitizedValue = null;
                     } else if (typeof value === 'string') {
+                        if (settingConfig.validateHttpUrl) {
+                            const normalizedUrl =
+                                normalizeHttpUrlSetting(value);
+                            if (normalizedUrl === INVALID_HTTP_URL) {
+                                await restoreTextSettingInput(settingName);
+                                showSystemAlert(
+                                    'Enter a valid http:// or https:// image URL.',
+                                    'warning',
+                                );
+                                return;
+                            }
+                            sanitizedValue = normalizedUrl;
+                            await restoreTextSettingInputValue(
+                                settingName,
+                                sanitizedValue,
+                            );
+                            break;
+                        }
+
                         sanitizedValue = sanitizeString(value);
 
                         if (settingConfig.trim) {
@@ -751,12 +808,8 @@ export const handleSaveSettings = async (settingName, value) => {
                     }
                     break;
 
-                case 'themeEditor':
-                    sanitizedValue = sanitizeCustomTheme(value);
-                    break;
-
-                case 'themeSlots':
-                    sanitizedValue = sanitizeCustomThemeSlots(value);
+                case 'backgroundImage':
+                    sanitizedValue = sanitizeBackgroundImage(value);
                     break;
             }
         }
@@ -900,11 +953,34 @@ export const handleSaveSettings = async (settingName, value) => {
 };
 
 const syncToSettingsKey = (settingName, value) => {
-    chrome.storage.local.get('rovalra_settings', (result) => {
-        const settingsData = result.rovalra_settings || {};
-        settingsData[settingName] = value;
-        chrome.storage.local.set({ rovalra_settings: settingsData });
-    });
+    settingsKeySyncQueue = settingsKeySyncQueue
+        .catch(() => {})
+        .then(
+            () =>
+                new Promise((resolve, reject) => {
+                    chrome.storage.local.get('rovalra_settings', (result) => {
+                        if (chrome.runtime.lastError) {
+                            reject(chrome.runtime.lastError);
+                            return;
+                        }
+
+                        const settingsData = result.rovalra_settings || {};
+                        settingsData[settingName] = value;
+                        chrome.storage.local.set(
+                            { rovalra_settings: settingsData },
+                            () => {
+                                if (chrome.runtime.lastError) {
+                                    reject(chrome.runtime.lastError);
+                                } else {
+                                    resolve();
+                                }
+                            },
+                        );
+                    });
+                }),
+        );
+
+    return settingsKeySyncQueue;
 };
 
 export const buildSettingsKey = async () => {
@@ -1023,12 +1099,6 @@ export const initSettings = async (settingsContent) => {
                                 settings[settingName] || setting.default,
                             );
                         }
-                    } else if (setting.type === 'themeEditor') {
-                        if (element.rovalraThemeEditorApi) {
-                            element.rovalraThemeEditorApi.setValue(
-                                settings[settingName] || setting.default,
-                            );
-                        }
                     } else if (
                         setting.type === 'input' ||
                         setting.type === 'color'
@@ -1124,13 +1194,6 @@ export const initSettings = async (settingsContent) => {
                             } else if (childSetting.type === 'gradient') {
                                 if (childElement.rovalraGradientApi) {
                                     childElement.rovalraGradientApi.setValue(
-                                        settings[childName] ||
-                                            childSetting.default,
-                                    );
-                                }
-                            } else if (childSetting.type === 'themeEditor') {
-                                if (childElement.rovalraThemeEditorApi) {
-                                    childElement.rovalraThemeEditorApi.setValue(
                                         settings[childName] ||
                                             childSetting.default,
                                     );
@@ -1719,6 +1782,11 @@ export function initializeSettingsEventListeners() {
             'https://www.roblox.com/my/account?rovalra=store';
     });
 
+    document.addEventListener('rovalra:openFrameStore', () => {
+        window.location.href =
+            'https://www.roblox.com/my/account?rovalra=store&tab=frames';
+    });
+
     document.addEventListener('rovalra:generateEnvironmentJson', async () => {
         const settings = await loadSettings();
         const envConfig = {};
@@ -2136,7 +2204,11 @@ export function initializeSettingsEventListeners() {
                     );
                 }
             }
-        } else if (target.matches('input[type="text"], input:not([type])')) {
+        } else if (
+            target.matches(
+                'input[type="text"], input[type="url"], input:not([type])',
+            )
+        ) {
             value = target.value.trim() === '' ? null : target.value;
             savePromises.push(handleSaveSettings(settingName, value));
         } else if (target.matches('input[type="number"]')) {

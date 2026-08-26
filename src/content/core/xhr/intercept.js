@@ -1,3 +1,29 @@
+const AccessoryAssetTypes = [
+    8,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+];
+
+const LayeredAssetTypes = [
+    64,
+    65,
+    66,
+    67,
+    68,
+    69,
+    70,
+    71,
+    72,
+    76,
+    77,
+    41,
+];
+
 (function () {
     'use strict';
 
@@ -37,7 +63,7 @@
         'https://apis.roblox.com/matchmaking-api/v1/client-status';
     const GAME_LAUNCH_SUCCESS_URL =
         'https://metrics.roblox.com/v1/games/report-event';
-    const GAME_SERVERS_API_URL = 'https://games.roblox.com/v1/games/';
+    const GAME_SERVERS_API_URL = 'https://games.roblox.com/';
     const GAMES_ROBLOX_API = 'https://games.roblox.com/';
     const TRADES_API_URL = 'https://trades.roblox.com/v2/users/';
     const TRADE_DETAILS_API_URL = 'https://trades.roblox.com/v2/trades/';
@@ -46,11 +72,18 @@
     const GROUP_ROLES_API_PATH = /^\/v1\/users\/(\d+)\/groups\/roles$/;
     const PROFILE_API_URL =
         'https://apis.roblox.com/profile-platform-api/v1/profiles/get';
+    const ACCOUNT_SETTINGS_UI_API_URL =
+        'https://apis.roblox.com/guac-v2/v1/bundles/account-settings-ui';
+    const USER_SETTINGS_API_URL =
+        'https://apis.roblox.com/user-settings-api/v1/user-settings';
+    const FREE_ROBLOX_PLUS_THEMES_SETTING = 'FreeRobloxPlusThemesEnabledv2';
     const ROBLOX_ADMIN_GROUP_ID = 1200769;
     const OMNI_RECOMMENDATION_API_URL =
         'https://apis.roblox.com/discovery-api/omni-recommendation';
     const FRIEND_CAROUSEL_TOPIC_ID = 600000000;
     const FRIEND_CAROUSEL_TREATMENT_TYPE = 'FriendCarousel';
+    const THUMBNAILS_API_HOST = 'thumbnails.roblox.com';
+    const THUMBNAIL_BACKGROUND_SETTING = 'disableThumbnailBackground';
 
     let ASSET_TYPE_ACCESSORIES = [8, 41, 42, 43, 44, 45, 46, 47, 57, 58];
     let ASSET_TYPE_LAYERED = [64, 65, 66, 67, 68, 69, 70, 71, 72];
@@ -66,11 +99,94 @@
     let homeLayoutReadyPromise = null;
     let resolveHomeLayoutReady = null;
     let robloxGroupFeaturesEnabled = true;
+    let freeRobloxPlusThemesEnabled = false;
+    let disableThumbnailBackground = false;
+
+    function updateThumbnailBackgroundSetting(value) {
+        disableThumbnailBackground = value === true;
+    }
+
+    function isThumbnailsApiRequest(url) {
+        try {
+            return new URL(url, window.location.origin).hostname ===
+                THUMBNAILS_API_HOST;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function rewriteThumbnailRequestBody(body) {
+        if (typeof body !== 'string' || !body) return body;
+
+        try {
+            const data = JSON.parse(body);
+            if (!data || typeof data !== 'object') {
+                return body;
+            }
+
+            if (Array.isArray(data)) {
+                data.forEach((request) => {
+                    if (request && typeof request === 'object') {
+                        request.includeBackground = false;
+                    }
+                });
+            } else {
+                data.includeBackground = false;
+            }
+
+            return JSON.stringify(data);
+        } catch (e) {
+            return body;
+        }
+    }
+
+    async function rewriteThumbnailFetchArgs(args, requestUrl) {
+        if (!disableThumbnailBackground || !isThumbnailsApiRequest(requestUrl)) {
+            return args;
+        }
+
+        const [input, init] = args;
+        if (init?.body !== undefined) {
+            return [
+                input,
+                { ...init, body: rewriteThumbnailRequestBody(init.body) },
+            ];
+        }
+
+        if (!(input instanceof Request)) return args;
+
+        try {
+            const body = await input.clone().text();
+            const rewrittenBody = rewriteThumbnailRequestBody(body);
+            if (rewrittenBody === body) return args;
+
+            return [new Request(input, { body: rewrittenBody }), init];
+        } catch (e) {
+            return args;
+        }
+    }
+
+    try {
+        freeRobloxPlusThemesEnabled =
+            sessionStorage.getItem('rovalra_freeRobloxPlusThemes') === 'true';
+    } catch (e) {}
 
     document.addEventListener('rovalra:pageSettingSaved', (event) => {
         const detail = parseBridgeDetail(event.detail);
         if (detail?.name === 'robloxGroupFeaturesEnabled') {
             robloxGroupFeaturesEnabled = detail.value !== false;
+        }
+        if (detail?.name === FREE_ROBLOX_PLUS_THEMES_SETTING) {
+            freeRobloxPlusThemesEnabled = detail.value === true;
+            try {
+                sessionStorage.setItem(
+                    'rovalra_freeRobloxPlusThemes',
+                    String(freeRobloxPlusThemesEnabled),
+                );
+            } catch (e) {}
+        }
+        if (detail?.name === THUMBNAIL_BACKGROUND_SETTING) {
+            updateThumbnailBackgroundSetting(detail.value);
         }
     });
     document.addEventListener('rovalra:settingsState', (event) => {
@@ -78,8 +194,14 @@
         if (typeof detail?.robloxGroupFeaturesEnabled === 'boolean') {
             robloxGroupFeaturesEnabled = detail.robloxGroupFeaturesEnabled;
         }
+        if (
+            typeof detail?.[THUMBNAIL_BACKGROUND_SETTING] === 'boolean'
+        ) {
+            updateThumbnailBackgroundSetting(
+                detail[THUMBNAIL_BACKGROUND_SETTING],
+            );
+        }
     });
-
     try {
         streamerModeEnabled =
             sessionStorage.getItem('rovalra_streamermode') === 'true';
@@ -192,6 +314,53 @@
             statusText: response.statusText,
             headers: newHeaders,
         });
+    }
+
+    function isAccountSettingsUiRequest(url) {
+        try {
+            const parsedUrl = new URL(url, window.location.origin);
+            const endpointUrl = new URL(ACCOUNT_SETTINGS_UI_API_URL);
+            return (
+                parsedUrl.origin === endpointUrl.origin &&
+                parsedUrl.pathname === endpointUrl.pathname
+            );
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function isUserSettingsRequest(url) {
+        try {
+            const parsedUrl = new URL(url, window.location.origin);
+            const endpointUrl = new URL(USER_SETTINGS_API_URL);
+            return (
+                parsedUrl.origin === endpointUrl.origin &&
+                parsedUrl.pathname === endpointUrl.pathname
+            );
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function dispatchUserSettingsResponse(data) {
+        if (!data || typeof data !== 'object' || Array.isArray(data)) return;
+        dispatchBridgeEvent(document, 'rovalra:user-settings-response', data);
+    }
+
+    function applyAccountSettingsUiOverrides(data) {
+        if (!data || typeof data !== 'object' || Array.isArray(data)) {
+            return false;
+        }
+
+        if (data.appThemesAccess === 'Enabled') return false;
+
+        data.appThemesAccess = 'Enabled';
+        return true;
+    }
+
+    function dispatchProfilePlatformResponse(data) {
+        if (!data?.components) return;
+        dispatchBridgeEvent(window, 'rovalra-profile-platform-response', data);
     }
 
     function getGroupRolesRequestUserId(url) {
@@ -552,7 +721,21 @@
         const [url] = args;
         const requestUrl = getRequestUrl(url);
 
+        args = await rewriteThumbnailFetchArgs(args, requestUrl);
+
         let response = await originalFetch(...args);
+
+        if (
+            freeRobloxPlusThemesEnabled &&
+            isAccountSettingsUiRequest(requestUrl)
+        ) {
+            try {
+                const data = await response.clone().json();
+                if (applyAccountSettingsUiOverrides(data)) {
+                    response = responseWithJson(response, data);
+                }
+            } catch (e) {}
+        }
 
         if (
             streamerModeEnabled &&
@@ -633,13 +816,22 @@
         if (requestUrl.includes(PROFILE_API_URL)) {
             try {
                 const data = await response.clone().json();
-                if (applyRobloxAdminProfileResponse(data)) {
+                const changed = applyRobloxAdminProfileResponse(data);
+                dispatchProfilePlatformResponse(data);
+                if (changed) {
                     response = responseWithJson(response, data);
                 }
             } catch (error) {}
         }
 
         if (typeof requestUrl === 'string') {
+            if (isUserSettingsRequest(requestUrl)) {
+                response
+                    .clone()
+                    .json()
+                    .then(dispatchUserSettingsResponse)
+                    .catch(() => {});
+            }
             if (requestUrl.includes(CATALOG_API_URL)) {
                 response
                     .clone()
@@ -689,7 +881,7 @@
             }
             if (
                 requestUrl.includes(GAME_SERVERS_API_URL) &&
-                requestUrl.includes('/servers/')
+                /\/v\d+\/games\/\d+\/servers\//.test(requestUrl)
             ) {
                 response
                     .clone()
@@ -808,12 +1000,21 @@
         if (typeof url === 'string' && url.includes(PROFILE_API_URL)) {
             this._rovalra_profile_api = true;
         }
+        if (typeof url === 'string' && isAccountSettingsUiRequest(url)) {
+            this._rovalra_account_settings_ui = true;
+        }
 
         return originalXhrOpen.apply(this, [method, url, ...rest]);
     };
 
     XMLHttpRequest.prototype.send = function (...args) {
         const xhr = this;
+        if (
+            disableThumbnailBackground &&
+            isThumbnailsApiRequest(xhr._rovalra_url)
+        ) {
+            args[0] = rewriteThumbnailRequestBody(args[0]);
+        }
         if (
             xhr._rovalra_spoof_settings ||
             xhr._rovalra_spoof_phone ||
@@ -823,7 +1024,8 @@
             xhr._rovalra_spoof_age_group ||
             xhr._rovalra_spoof_sessions ||
             xhr._rovalra_home_layout ||
-            xhr._rovalra_profile_api
+            xhr._rovalra_profile_api ||
+            xhr._rovalra_account_settings_ui
         ) {
             Object.defineProperty(xhr, 'responseText', {
                 configurable: true,
@@ -847,6 +1049,11 @@
                             hideHomeSorts(data);
                             applyAccurateContinue(data);
                             reorderHomeSorts(data);
+                        }
+                        if (xhr._rovalra_account_settings_ui) {
+                            if (freeRobloxPlusThemesEnabled) {
+                                applyAccountSettingsUiOverrides(data);
+                            }
                         }
                         if (xhr._rovalra_profile_api) {
                             applyRobloxAdminProfileResponse(data);
@@ -955,7 +1162,7 @@
                         );
                     if (
                         url.includes(GAME_SERVERS_API_URL) &&
-                        url.includes('/servers/')
+                        /\/v\d+\/games\/\d+\/servers\//.test(url)
                     )
                         triggerEvent('rovalra-game-servers-response', {
                             url,
@@ -992,6 +1199,14 @@
                             url,
                             JSON.parse(xhr.responseText),
                         );
+                    if (url.includes(PROFILE_API_URL))
+                        dispatchProfilePlatformResponse(
+                            JSON.parse(xhr.responseText),
+                        );
+                    if (isUserSettingsRequest(url))
+                        dispatchUserSettingsResponse(
+                            JSON.parse(xhr.responseText),
+                        );
                 } catch (e) {}
             }
         });
@@ -1012,6 +1227,7 @@
         const detail = parseBridgeDetail(e.detail);
         if (detail) {
             if (typeof detail.enabled === 'boolean') {
+                window.rovalraMultiEquipEnabled = detail.enabled;
                 multiAccessoryEnabled = detail.enabled;
             }
             if (Array.isArray(detail.accessories)) {
@@ -1132,6 +1348,85 @@
                     }
                 },
             });
+        }
+
+        const customEquipAsset = (...args) => {
+            const [assetToAdd, assetArr] = args
+            let accessoryCount = 0
+            let layeredCount = 0
+
+            const assetToAddIsAccessory = AccessoryAssetTypes.includes(assetToAdd.assetType.id)
+            const assetToAddIsLayered = LayeredAssetTypes.includes(assetToAdd.assetType.id)
+
+            const newAssetArr = []
+
+            for (const asset of assetArr.toReversed()) {
+                let canAdd = true
+
+                //enforce accessory limit (10)
+                if (AccessoryAssetTypes.includes(asset.assetType.id)) {
+                    accessoryCount++
+                    if (accessoryCount >= 9 && assetToAddIsAccessory) canAdd = false
+                }
+
+                //enforce layered limit (10, also includes hair)
+                if (LayeredAssetTypes.includes(asset.assetType.id)) {
+                    layeredCount++
+                    if (layeredCount >= 9 && assetToAddIsLayered) canAdd = false
+                }
+
+                //enforce limit of items you can only equip one of (although this never happens because then we dont hijack)
+                if (!assetToAddIsAccessory && !assetToAddIsLayered && assetToAdd.assetType.id === asset.assetType.id) {
+                    canAdd = false
+                }
+
+                if (canAdd) newAssetArr.push(asset)
+            }
+
+            newAssetArr.reverse()
+            newAssetArr.push(assetToAdd)
+
+            return newAssetArr
+        }
+
+        const originalDefineProperty = Object.defineProperty
+        Object.defineProperty = function(obj, prop, descriptor) {
+            //find modules
+            if (prop === "__esModule") {
+                setTimeout(() => {
+                    //if module includes addAssetToAvatar
+                    if (Object.keys(obj).includes("addAssetToAvatar")) {
+                        const originalDescriptor = Object.getOwnPropertyDescriptor(obj, "addAssetToAvatar")
+                        const originalGetter = originalDescriptor.get
+                        const originalAddAssetToAvatar = originalGetter()
+
+                        //hijack addAssetToAvatar when needed
+                        Object.defineProperty(obj, "addAssetToAvatar", {
+                            get() {
+                                return (...args) => {
+                                    const [asset] = args
+
+                                    const isAccessory = AccessoryAssetTypes.includes(asset.assetType.id)
+                                    const isLayered = LayeredAssetTypes.includes(asset.assetType.id)
+                                    const needsHijack = isAccessory || isLayered
+
+                                    if (window.rovalraMultiEquipEnabled && needsHijack) {
+                                        return customEquipAsset(...args)
+                                    } else {
+                                        return originalAddAssetToAvatar(...args)
+                                    }
+                                }
+                            },
+                            configurable: true,
+                        })
+                    }
+                }, 1)
+            }
+            if (prop === "addAssetToAvatar") {
+                descriptor.configurable = true
+            }
+
+            return originalDefineProperty.call(Object, obj, prop, descriptor)
         }
     };
 
